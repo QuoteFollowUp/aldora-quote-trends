@@ -22,6 +22,7 @@
   --ok: #7fcf6a; --bad: #ff8a80; --warn: #f0b45a; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
 .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 16px 48px; display: flex; flex-direction: column; gap: 18px; }

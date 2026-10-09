@@ -19,6 +19,7 @@
   let status = 'All', search = '', repKey = '', sortK = 'change', sortDir = 1;
   const picked = new Set();
   let shown = [];
+  const PAGE = 250; let showAll = false;
 
   // ---------- access and loading
   async function load() {
@@ -29,12 +30,15 @@
     if (res.status === 401) { store.del(CODE_KEY); return showGate('That code did not work.'); }
     if (res.status === 404) return fail('The server functions are not running (404). In Netlify, check Deploys for a failed deploy and Logs > Functions for data and upload.');
     if (!res.ok) { const j = await res.json().catch(() => ({})); return fail('The server returned an error (' + res.status + '). ' + (j.error || 'Try again in a minute.')); }
+    $('gate-err').textContent = 'Downloading the latest data...';
     const json = await res.json();
     if (json.empty) return fail('No data yet. A manager needs to upload the open and closed quote exports on the upload page.', true);
     meta = json;
     B = E.build(E.decode(json));
     if (!B) return fail('The saved data has no quotes for the Aldora branches.', true);
     $('gate').hidden = true;
+    $('takeaway').textContent = 'Building the views...';
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
     try { initControls(); draw(); } catch (e) { $('takeaway').textContent = 'The dashboard hit an error while drawing: ' + e.message + '. Send this message to Fred.'; console.error(e); }
   }
   function showGate(msg) { $('gate').hidden = false; $('gate-err').textContent = msg; $('gate-code').focus(); }
@@ -58,7 +62,7 @@
   function initControls() {
     seg($('branch-seg'), ['All branches', ...B.branches], (v) => v, (v) => { P.branch = v; repKey = ''; draw(); });
     seg($('cat-seg'), CATS, (v) => (v === 'All' ? 'All products' : v), (v) => { P.cat = v; draw(); });
-    seg($('status-seg'), STATUSES, (v) => v, (v) => { status = v; drawCustomers(); });
+    seg($('status-seg'), STATUSES, (v) => v, (v) => { status = v; showAll = false; drawCustomers(); });
     $('top-rep').replaceChildren(new Option('All reps', ''), ...B.repNames.map((n) => new Option(n, n)));
     $('top-rep').addEventListener('change', (e) => { P.rep = e.target.value; P.branch = 'All branches'; repKey = ''; picked.clear(); draw(); });
     $('rep-select').addEventListener('change', (e) => { repKey = e.target.value; drawReps(); drawCustomers(); });
@@ -147,6 +151,7 @@
     $('legend').hidden = P.cat !== 'All' || !!P.rep;
     $('trend-note').textContent = single ? 'Quotes written per month. Hover a bar for the split and customers quoting.' : 'Quotes written per month. Each panel has its own scale. Click a branch to filter the page.';
     const list = single ? [P.branch] : repBranches;
+    const later = [];
     list.forEach((b) => {
       const v = B.volume({ branch: b, cat: P.cat, rep: P.rep });
       if (!v.any && !single) return;
@@ -154,10 +159,11 @@
       if (!single) { p.tabIndex = 0; p.setAttribute('role', 'button'); p.setAttribute('aria-label', 'Filter to ' + b); const go = () => { P.branch = b; repKey = ''; draw(); }; p.addEventListener('click', go); p.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }); }
       const h = document.createElement('div'); h.className = 'ph';
       const bt = document.createElement('b'); bt.textContent = b;
-      const ch = document.createElement('span'); ch.className = 'chip ' + dirCls(v.change); ch.textContent = W.recentLabel + ' vs ' + W.priorLabel + ' ' + pct(v.change);
+      const ch = document.createElement('span'); ch.className = 'chip ' + dirCls(v.change); ch.textContent = (single ? W.recentLabel + ' vs ' + W.priorLabel + ' ' : '') + pct(v.change); ch.title = W.recentLabel + ' vs ' + W.priorLabel;
       h.append(bt, ch); p.appendChild(h); box.appendChild(p);
       const total = d3.sum(v.total);
       if (P.cat !== 'All' && total < 20) { const lo = document.createElement('div'); lo.className = 'note'; lo.textContent = 'Only ' + total + ' ' + P.cat.toLowerCase() + ' quote' + (total === 1 ? '' : 's') + ' in this period. Blank months are zero.'; p.appendChild(lo); }
+      later.push(() => {
       const Wd = Math.max(220, p.clientWidth || 260), H = single ? 210 : 130, m = { t: 18, r: 4, b: 18, l: 4 };
       const idx = W.months.map((_, i) => i);
       const x = d3.scaleBand(idx, [m.l, Wd - m.r]).padding(0.25);
@@ -183,7 +189,9 @@
       const mx = d3.maxIndex(v.total);
       const lab = idx.filter((i) => single || i === mx || v.total[i] === 0);
       svg.selectAll('text.v').data(lab).join('text').attr('class', 'v').attr('x', (i) => x(i) + x.bandwidth() / 2).attr('y', (i) => y(v.total[i]) - 4).attr('text-anchor', 'middle').attr('fill', (i) => (v.total[i] ? 'var(--fg)' : 'var(--muted)')).attr('font-size', 11).text((i) => n0(v.total[i]));
+      });
     });
+    later.forEach((f) => f());
     // table
     const rows = (single ? [P.branch] : ['All branches', ...list]).map((b) => {
       const f = { branch: b, cat: P.cat, rep: P.rep };
@@ -248,6 +256,7 @@
     list.sort((a, b) => { const va = sk(a), vb = sk(b); if (va === vb) return 0; if (va == null || va === '') return 1; if (vb == null || vb === '') return -1; return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * sortDir; });
     shown = list;
     $('cust-count').textContent = n0(list.length) + ' customers';
+    const visible = showAll ? list : list.slice(0, PAGE);
     const all = document.createElement('input'); all.type = 'checkbox'; all.setAttribute('aria-label', 'Select all rows shown');
     const inView = list.filter((x) => picked.has(pkey(x.c))).length;
     all.checked = list.length > 0 && inView === list.length; all.indeterminate = inView > 0 && inView < list.length;
@@ -268,7 +277,11 @@
       { h: 'Last quote $', key: 'lastTotal', v: (x) => x.s.lastTotal, f: money },
       { h: 'Days since', key: 'days', v: (x) => x.s.daysSince, f: n0 },
       { h: 'Status', key: 'status', txt: true, v: (x) => x.s.status, cls: (v) => stCls(v) },
-    ], list, { sortable: true, sortK, sortDir, onSort: (k) => { if (sortK === k) sortDir = -sortDir; else { sortK = k; sortDir = ['customer', 'branch', 'rep', 'contact', 'phone', 'products', 'status', 'last'].includes(k) ? 1 : -1; } drawCustomers(); }, rowClass: (x) => (picked.has(pkey(x.c)) ? 'picked' : '') });
+    ], visible, { sortable: true, sortK, sortDir, onSort: (k) => { if (sortK === k) sortDir = -sortDir; else { sortK = k; sortDir = ['customer', 'branch', 'rep', 'contact', 'phone', 'products', 'status', 'last'].includes(k) ? 1 : -1; } drawCustomers(); }, rowClass: (x) => (picked.has(pkey(x.c)) ? 'picked' : '') });
+    let more = $('show-more');
+    if (!more) { more = document.createElement('button'); more.id = 'show-more'; more.type = 'button'; more.className = 'btn ghost'; more.addEventListener('click', () => { showAll = true; drawCustomers(); }); $('cust-table').parentElement.after(more); }
+    more.hidden = showAll || list.length <= PAGE;
+    more.textContent = 'Show all ' + n0(list.length) + ' customers (first ' + PAGE + ' shown)';
     updateSel();
   }
   function updateSel() {
@@ -363,10 +376,12 @@
 
   // ---------- draw everything
   function draw() {
+    showAll = false;
     $('branch-seg').querySelectorAll('button').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.v === P.branch)); b.hidden = !!P.rep && b.dataset.v !== 'All branches' && b.dataset.v !== P.branch && !B.volume({ branch: b.dataset.v, cat: 'All', rep: P.rep }).any; });
     $('cat-seg').querySelectorAll('button').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.v === P.cat)); b.hidden = b.dataset.v !== 'All' && b.dataset.v !== P.cat && !B.volume({ branch: P.branch, cat: b.dataset.v, rep: P.rep }).any; });
     $('top-rep').value = P.rep;
     drawHeader(); drawTrend(); drawRepSelect(); drawReps(); drawCustomers(); drawProducts();
+    requestAnimationFrame(() => drawTrend());
   }
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => B && drawTrend(), 200); });
   if (store.get(CODE_KEY)) $('gate-err').textContent = '';
