@@ -370,6 +370,103 @@
     navigator.clipboard.writeText(text).then(() => flash(btn, 'Copied ' + n0(rows.length) + ' rows'), () => flash(btn, 'Copy failed'));
   });
 
+
+  // ---------- rep one-pager: home branch only, sized for one letter page
+  function spark(vals, from) {
+    const w = 132, h = 26, n = vals.length, bw = w / n, mx = Math.max(1, ...vals);
+    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' + vals.map((v, i) => i < from ? '' : '<rect x="' + (i * bw + 1).toFixed(1) + '" y="' + (h - (v / mx) * (h - 2)).toFixed(1) + '" width="' + (bw - 2).toFixed(1) + '" height="' + ((v / mx) * (h - 2)).toFixed(1) + '" rx="1.5" fill="' + (i === n - 1 && B.W.partial ? '#9fb9bd' : i >= n - (B.W.partial ? 4 : 3) ? '#115e67' : '#b9cfd2') + '"/>').join('') + '</svg>';
+  }
+  function repPdfHtml(rep, branch) {
+    // branch = one branch, or null for every branch the rep quotes (10+ quotes), broken out by branch
+    const W = B.W, lf = W.lastFull, multi = !branch;
+    const SHORT = { Atlanta: 'ATL', Charleston: 'CHS', 'Coral Springs': 'CS', Louisville: 'LPG', 'Newport News': 'NN', Orlando: 'ORL' };
+    const brs = multi ? B.branches.filter((b) => d3.sum(B.volume({ branch: b, rep, cat: 'All' }).total) >= 10).sort((a, b) => d3.sum(B.volume({ branch: b, rep, cat: 'All' }).total) < d3.sum(B.volume({ branch: a, rep, cat: 'All' }).total) ? -1 : 1) : [branch];
+    const home = multi ? brs.join(', ') : branch;
+    const scope = multi ? 'All branches' : branch;
+    const cls = (v) => (v == null ? '' : v >= 10 ? 'up' : v <= -10 ? 'down' : '');
+    const P2 = (v) => '<span class="' + cls(v) + '">' + pct(v) + '</span>';
+    const all = B.volume({ branch: scope, rep, cat: 'All' });
+    const start = Math.min(...brs.map((b) => B.bStart[b] || 0));
+    const prodsFor = (b) => E.CATS.map((c) => ({ c, v: B.volume({ branch: b, rep, cat: c }) })).filter((r) => d3.sum(r.v.total) > 0).sort((a, b2) => d3.sum(b2.v.total) - d3.sum(a.v.total));
+    const custs = B.customers({ branch: scope, rep, cat: 'All' }).filter((x) => brs.includes(x.c.branch));
+    const sc = B.statusCounts(custs);
+    const dropped = custs.filter((x) => x.s.status === 'Dropped off').sort((a, b) => b.c.quotes.length - a.c.quotes.length);
+    const growing = custs.filter((x) => x.s.recent > 0 && x.s.change > 0).sort((a, b) => b.s.change - a.s.change || b.s.recent - a.s.recent).slice(0, 5);
+    const DROP_MAX = multi ? 8 : 10;
+    const mainProd = (c) => (c.products || '').split(' (')[0];
+    const slowing = custs.filter((x) => x.s.status === 'Slowing').sort((a, b) => a.s.change - b.s.change || b.s.prior - a.s.prior).slice(0, multi ? 8 : 10);
+    const row = (cells) => '<tr>' + cells.map((c) => '<td' + (c[1] ? ' class="' + c[1] + '"' : '') + '>' + c[0] + '</td>').join('') + '</tr>';
+    const mIdx = W.months.map((_, i) => i).filter((i) => i >= start);
+    const groups = multi ? [{ c: 'All branches, all products', v: all, top: true }].concat(...brs.map((b) => (() => { const bv = B.volume({ branch: b, rep, cat: 'All' }); const minor = d3.sum(bv.total) < 0.15 * d3.sum(all.total); return [{ c: b + (minor ? ', all products (small, not split)' : ', all products'), v: bv, head: true }, ...(minor ? [] : prodsFor(b).map((r) => ({ c: r.c, v: r.v, sub: true })))]; })()))
+      : [{ c: 'All products', v: all, head: true }, ...prodsFor(branch)];
+    const prodRows = groups.map((r) => (r.head && multi ? '<tr class="grp">' : '<tr>') + [
+      [r.sub ? '<span class="ind">' + esc(r.c) + '</span>' : esc(r.c), r.head || r.top ? 'b' : ''],
+      ...mIdx.map((i) => [n0(r.v.total[i]), 'n' + (r.v.total[i] ? '' : ' m') + (i === lf ? ' cur' : '')]),
+      [n0(r.v.recent), 'n'], [r.v.prior < 5 ? '—' : P2(r.v.change), 'n'],
+      [r.v.total[lf - 1] < 5 ? '—' : P2(r.v.lastVsPrev), 'n'],
+      [r.v.trend == null ? '—' : P2(r.v.trend), 'n'],
+    ].map((c) => '<td' + (c[1] ? ' class="' + c[1] + '"' : '') + '>' + c[0] + '</td>').join('') + '</tr>').join('');
+    const prodHead = '<th>Product</th>' + mIdx.map((i) => '<th class="n">' + W.labels[i] + (W.partial && i === W.months.length - 1 ? '*' : '') + '</th>').join('') + '<th class="n">' + W.recentLabel + '</th><th class="n">vs ' + W.priorLabel + '</th><th class="n">' + W.lastFullLabel + ' vs ' + W.prevFullLabel + '</th><th class="n">Year trend</th>';
+    const dropRows = dropped.slice(0, DROP_MAX).map((x) => { const q = x.c.recentQuotes[0] || {}; return row([
+      ['<div class="one"><b>' + esc(x.c.customer) + '</b></div><div class="one m">' + (esc([x.c.contact, x.c.phone].filter(Boolean).join(' · ')) || '&nbsp;') + '</div>', ''],
+      ...(multi ? [[SHORT[x.c.branch] || x.c.branch, 'm']] : []),
+      [esc(q.date || ''), 'n'], [q.total != null ? esc(money(q.total)) : '', 'n'], ['<div class="one">' + esc(q.products || '') + '</div>', ''], [n0(x.c.quotes.length), 'n'],
+    ]); }).join('');
+    const growRows = growing.map((x) => row([
+      ['<div class="one"><b>' + esc(x.c.customer) + '</b></div>', ''], ['<div class="one">' + (multi ? (SHORT[x.c.branch] || '') + ' · ' : '') + esc(mainProd(x.c)) + '</div>', 'm'],
+      [n0(x.s.prior), 'n m'], [n0(x.s.recent), 'n'], ['+' + n0(x.s.change), 'n up'], [esc(x.s.last.slice(0, 5)), 'n'],
+    ])).join('');
+    const slowRows = slowing.map((x) => row([
+      ['<div class="one"><b>' + esc(x.c.customer) + '</b></div>', ''], ['<div class="one">' + (multi ? (SHORT[x.c.branch] || '') + ' · ' : '') + esc(mainProd(x.c)) + '</div>', 'm'],
+      [n0(x.s.prior), 'n m'], [n0(x.s.recent), 'n'], [n0(x.s.change), 'n down'], [esc(x.s.last.slice(0, 5)), 'n'],
+    ])).join('');
+    const logo = new URL('logo.png', location.href).href;
+    const today = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+    const tile = (lab, val, sub) => '<div class="tile"><div class="lab">' + lab + '</div><div class="big">' + val + '</div><div class="m">' + sub + '</div></div>';
+    const colg = multi ? '<colgroup><col style="width:31%"><col style="width:23%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:13%"></colgroup>' : '<colgroup><col style="width:36%"><col style="width:16%"><col style="width:12%"><col style="width:12%"><col style="width:11%"><col style="width:13%"></colgroup>';
+    return '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(rep) + ' quote overview</title><style>'
+      + '@page{size:letter portrait;margin:0.4in}*{box-sizing:border-box}html,body{margin:0}body{font:10.5px/1.3 Helvetica,Arial,sans-serif;color:#1d2a31}'
+      + '.page{width:7.7in;height:10.1in;margin:0 auto;display:flex;flex-direction:column;gap:9px}'
+      + 'header{display:flex;align-items:center;gap:16px;border-bottom:3px solid #5f9339;padding-bottom:8px}header img{height:46px}'
+      + 'h1{font-size:20px;color:#243947;margin:0}.sub{color:#4a5a63;font-size:10px;margin-top:3px}h2{font-size:12.5px;color:#115e67;margin:0 0 4px}'
+      + '.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.tile{border:1px solid #c9d5d8;border-top:3px solid #115e67;border-radius:4px;padding:7px 9px}'
+      + '.tile .lab{color:#5b6b73;font-size:9.5px}.tile .big{font-size:19px;color:#243947;font-weight:bold;margin:2px 0}'
+      + '.sec{display:flex;flex-direction:column;min-height:0}.sec .tw{flex:1;min-height:0}.sec table{height:100%}'
+      + '.grow1{flex:1 0 auto}.grow2{flex:1 0 auto}'
+      + 'table{border-collapse:collapse;width:100%}th{background:#243947;color:#fff;text-align:left;font-size:9.5px;padding:4px 5px;height:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+      + 'td{border-bottom:1px solid #d6e0e2;padding:3px 5px;vertical-align:middle}tr:nth-child(even) td{background:#f1f6f4;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+      + 'td.n,th.n{text-align:right;white-space:nowrap}td.cur{font-weight:bold;color:#115e67}tr.grp td{background:#dde9e6 !important;border-top:1px solid #9fb9bd;-webkit-print-color-adjust:exact;print-color-adjust:exact}.ind{padding-left:12px}table.fx{table-layout:fixed}.one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+      + 'td.b{font-weight:bold}.m{color:#5b6b73;font-size:9px}.up{color:#2f7a1f;font-weight:bold}.down{color:#b3261e;font-weight:bold}'
+      + '.cols{display:grid;grid-template-columns:1.15fr 1fr;gap:12px;min-height:0}.brsec{flex:1 0 auto}.cols>div{display:flex;flex-direction:column;gap:9px;min-height:0}'
+      + '.more{color:#5b6b73;font-size:9px;margin-top:3px}.brsec{border-top:2px solid #c9d5d8;padding-top:7px}.brsec th{background:#115e67}'
+      + 'footer{color:#5b6b73;font-size:8.5px;border-top:1px solid #d6e0e2;padding-top:5px}'
+      + '.bar{margin:8px auto;width:7.7in}.bar button{font:inherit;font-size:12px;padding:6px 14px;background:#115e67;color:#fff;border:0;border-radius:4px;cursor:pointer}@media print{.bar{display:none}}'
+      + '</style></head><body><div class="bar"><button onclick="window.print()">Print or save as PDF</button></div><div class="page">'
+      + '<header><img alt="Aldora" src="' + logo + '"><div><h1>' + esc(rep) + ' · ' + esc(home) + '</h1><div class="sub">Quote overview for customers assigned to ' + esc(rep) + ' at ' + esc(home) + '. Quotes written ' + W.firstUS + ' to ' + W.asOfUS + '. Printed ' + today + '.</div></div></header>'
+      + '<div class="tiles">'
+      + tile('Quotes in ' + W.lastFullLabel, n0(all.lastMonth), P2(all.lastVsPrev) + ' vs ' + W.prevFullLabel)
+      + tile('Last 3 months, ' + W.recentLabel, n0(all.recent), P2(all.change) + ' vs ' + W.priorLabel)
+      + tile('Year trend', all.trend == null ? '—' : P2(all.trend), 'since ' + (all.trendFrom || W.labels[0]))
+      + tile('Customers quoting in ' + W.lastFullLabel, n0(all.custLast), n0(all.cust[lf - 1]) + ' in ' + W.prevFullLabel)
+      + tile('Dropped off · Slowing', n0(sc['Dropped off']) + ' · ' + n0(sc.Slowing), n0(sc.New) + ' new, ' + n0(sc.Growing) + ' growing')
+      + '</div>'
+      + '<div class="cols grow2">'
+      + '<div><div class="sec" style="flex:1"><h2>Dropped off: call these first</h2><div class="tw"><table class="fx"><colgroup>' + (multi ? '<col style="width:37%"><col style="width:8%">' : '<col style="width:43%">') + '<col style="width:17%"><col style="width:13%"><col style="width:17%"><col style="width:10%"></colgroup><thead><tr><th>Customer</th>' + (multi ? '<th>Br</th>' : '') + '<th>Last quote</th><th class="n">Last $</th><th>Product</th><th class="n">Quotes</th></tr></thead><tbody>' + (dropRows || '<tr><td colspan="5">None. Every regular customer has quoted in the last 60 days.</td></tr>') + '</tbody></table></div>'
+      + (dropped.length > DROP_MAX ? '<div class="more">' + (dropped.length - DROP_MAX) + ' more on the dashboard (filter Status: Dropped off).</div>' : '') + '</div></div>'
+      + '<div><div class="sec" style="flex:' + Math.max(3, slowing.length) + '"><h2>Top ' + (multi ? 8 : 10) + ' slowing</h2><div class="tw"><table class="fx">' + colg + '<thead><tr><th>Customer</th>' + (multi ? '<th>Branch · product</th>' : '<th>Main product</th>') + '<th class="n">' + W.priorLabel + '</th><th class="n">' + W.recentLabel + '</th><th class="n">Down</th><th class="n">Last</th></tr></thead><tbody>' + (slowRows || '<tr><td colspan="6">No customers are slowing.</td></tr>') + '</tbody></table></div></div>'
+      + '<div class="sec" style="flex:' + Math.max(3, growing.length) + '"><h2>Top 5 growing</h2><div class="tw"><table class="fx">' + colg + '<thead><tr><th>Customer</th>' + (multi ? '<th>Branch · product</th>' : '<th>Main product</th>') + '<th class="n">' + W.priorLabel + '</th><th class="n">' + W.recentLabel + '</th><th class="n">Up</th><th class="n">Last</th></tr></thead><tbody>' + (growRows || '<tr><td colspan="6">No customers grew quarter over quarter.</td></tr>') + '</tbody></table></div></div></div>'
+      + '</div>'
+      + '<div class="sec grow1 brsec"><h2>' + esc(rep) + (multi ? ': quotes by branch and product' : ' at ' + esc(home) + ': quotes by product') + '</h2><div class="tw"><table class="prod"><thead><tr>' + prodHead + '</tr></thead><tbody>' + prodRows + '</tbody></table></div></div>'
+      + '<footer>Counts are quotes written for customers assigned to ' + esc(rep) + ' in the ERP, at ' + esc(home) + (multi ? ', broken out by the branch each quote was written at. Branches with fewer than 10 quotes are left off.' : ' only, for the products ' + esc(rep) + ' quotes.') + ' Year trend fits a straight line through each full month. Dropped off: 3 or more quotes, none in the last 60 days. Slowing: recent 3-month pace at least 25% below the 6 months before, ranked by quotes lost. Growing: most added quotes, ' + W.recentLabel + ' vs ' + W.priorLabel + '. A quote with two products counts in both rows.' + (W.partial ? ' * Month to date.' : '') + '</footer>'
+      + '</div></body></html>';
+  }
+  $('rep-pdf').addEventListener('click', () => {
+    if (!P.rep) return;
+    const html = repPdfHtml(P.rep, P.branch !== 'All branches' ? P.branch : null), w = window.open('', '_blank');
+    if (!w) { download(P.rep.replace(/[^A-Za-z0-9 ]+/g, '') + ' quote overview.html', html, 'text/html'); flash($('rep-pdf'), 'Pop-up blocked: saved as a file'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+    w.onload = () => setTimeout(() => w.print(), 300);
+  });
   // ---------- products
   function drawProducts() {
     const rows = E.CATS.map((c) => ({ c, v: B.volume({ branch: P.branch, cat: c, rep: P.rep }) })).filter((r) => r.v.any);
@@ -386,6 +483,8 @@
     $('branch-seg').querySelectorAll('button').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.v === P.branch)); b.hidden = !!P.rep && b.dataset.v !== 'All branches' && b.dataset.v !== P.branch && !B.volume({ branch: b.dataset.v, cat: 'All', rep: P.rep }).any; });
     $('cat-seg').querySelectorAll('button').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.v === P.cat)); b.hidden = b.dataset.v !== 'All' && b.dataset.v !== P.cat && !B.volume({ branch: P.branch, cat: b.dataset.v, rep: P.rep }).any; });
     $('top-rep').value = P.rep;
+    $('rep-pdf').hidden = !P.rep || !B.homeOf(P.rep);
+    if (P.rep) $('rep-pdf').textContent = 'One-pager: ' + P.rep.split(' ')[0] + ' · ' + (P.branch !== 'All branches' ? P.branch : 'all branches') + ' (PDF)';
     drawHeader(); drawTrend(); drawRepSelect(); drawReps(); drawCustomers(); drawProducts();
     requestAnimationFrame(() => drawTrend());
   }

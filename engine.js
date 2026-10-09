@@ -12,7 +12,8 @@
   const DAY = 86400000;
 
   const branchName = (loc) => BRANCHES[loc] || loc;
-  const clean = (x) => { if (x == null) return ''; const s = String(x).trim(); return !s || s.startsWith('{') ? '' : s; };
+  const clean = (x) => { if (x == null) return ''; const s = String(x).trim(); return !s || s.startsWith('{') || s.startsWith('[') ? '' : s; };
+  const GENERIC = new Set(['OFFICE', 'EMAIL', 'GENERAL', 'ACCOUNTS PAYABLE', 'AP', 'SALES', 'MAIN', 'N/A', 'NA', 'NONE', 'CUSTOMER', 'COMPANY', 'PURCHASING', 'ESTIMATING', 'SHOP', 'FRONT DESK']);
   const pad = (n) => String(n).padStart(2, '0');
   const ymd = (y, m, d) => y + '-' + pad(m) + '-' + pad(d);
   const toUS = (s) => s ? s.slice(5, 7) + '/' + s.slice(8, 10) + '/' + s.slice(0, 4) : '';
@@ -155,6 +156,10 @@
     }
 
     // Customers: dominant rep, latest contact and phone, last three quotes, product mix
+    // Contact names used on many different customers are Aldora staff (who entered the quote), not the customer's contact
+    const nameUse = new Map();
+    for (const x of qs) if (x.contact) { const k = x.contact.toUpperCase(); if (!nameUse.has(k)) nameUse.set(k, new Set()); nameUse.get(k).add(x.branch + '|' + x.cust); }
+    const goodContact = (n) => { const k = n.toUpperCase(); return !GENERIC.has(k) && !k.includes('COMPANY') && (nameUse.get(k) || new Set()).size <= 25; };
     const custMap = new Map();
     const sortedQ = qs.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     for (const x of sortedQ) {
@@ -162,7 +167,7 @@
       let c = custMap.get(k);
       if (!c) { c = { key: k, branch: x.branch, customer: x.cust, reps: new Map(), contact: '', phone: '', quotes: [] }; custMap.set(k, c); }
       c.reps.set(x.rep, (c.reps.get(x.rep) || 0) + 1);
-      if (x.contact) c.contact = x.contact;
+      if (x.contact && goodContact(x.contact)) c.contact = x.contact;
       if (x.phone) c.phone = x.phone;
       c.quotes.push(x);
     }
@@ -261,11 +266,11 @@
       const ys = [];
       for (let i = Math.max(start, lastFull - 11); i <= lastFull; i++) ys.push(sameLog[i] + sameClosed[i]);
       r.trend = null; r.trendFrom = '';
-      if (ys.length >= 4 && d3sum(ys) > 0) {
+      if (ys.length >= 4 && d3sum(ys) >= 12) {
         const n = ys.length, mx = (n - 1) / 2, my = d3sum(ys) / n;
         let num = 0, den = 0; ys.forEach((y, i) => { num += (i - mx) * (y - my); den += (i - mx) * (i - mx); });
         const slope = num / den, a = my - slope * mx, b0 = a, b1 = a + slope * (n - 1);
-        r.trend = b0 > 0 ? Math.round((b1 / b0 - 1) * 1000) / 10 : null;
+        r.trend = b0 > 0 ? Math.max(-100, Math.round((Math.max(0, b1) / b0 - 1) * 1000) / 10) : null;
         r.trendFrom = monthLabel(months[lastFull - n + 1]);
       }
       r.custLast = lastFull >= 0 ? r.cust[lastFull] : 0;
@@ -290,7 +295,8 @@
       for (const c of custs) if (!branch || branch === 'All branches' || c.branch === branch) { if (!keys.has(c.repKey)) keys.set(c.repKey, { key: c.repKey, branch: c.branch, rep: c.repGroup, reps: new Set() }); keys.get(c.repKey).reps.add(c.rep); }
       return [...keys.values()];
     };
-    return { W, volume, customers, statusCounts, repNames, repGroups, branches: Object.values(BRANCHES), bStart, closedCount, quoteCount: qs.length };
+    const homeOf = (rep) => (home.get(rep) || [])[0] || null;
+    return { W, volume, customers, statusCounts, repNames, repGroups, homeOf, branches: Object.values(BRANCHES), bStart, closedCount, quoteCount: qs.length };
   }
 
   root.QuoteEngine = { BRANCHES, CATS, detect, parseOpen, parseClosed, encode, decode, merge, build, toUS, pct };
