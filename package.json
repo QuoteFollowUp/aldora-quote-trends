@@ -1,0 +1,10 @@
+{
+  "name": "aldora-quote-trends",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Aldora quote volume trends by branch, rep, product and customer. Weekly Excel uploads, Netlify Blobs storage.",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}

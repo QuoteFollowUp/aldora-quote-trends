@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upload Quote Exports</title>
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Serif&display=swap">
+<link rel="stylesheet" href="app.css">
+<style>
+  .drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 28px 16px; text-align: center; background: var(--panel); cursor: pointer; }
+  .drop.over { border-color: var(--accent); background: var(--wash); }
+  .steps { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 6px; max-width: 80ch; }
+  .files li { margin: 4px 0; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .narrow { max-width: 900px; }
+</style>
+</head>
+<body>
+<div class="wrap narrow">
+  <div class="brand">
+    <div class="logo"><img src="logo.png" alt="Aldora"></div>
+    <header class="head">
+      <h1>Upload this week's quote exports</h1>
+      <p class="sub">Managers only. Files are read in your browser, merged with earlier uploads, then saved for the whole team.</p>
+      <div class="toplinks"><a href="./">Back to the dashboard</a></div>
+    </header>
+  </div>
+
+  <section class="card">
+    <h2>Each week</h2>
+    <ol class="steps">
+      <li>Run the <b>Open Quotes</b> report with the date range starting 01/01/2026 (or the start of the last 12 months) and ending today. Save it as Excel.</li>
+      <li>Run the <b>Closed Quotes</b> report. Save it as Excel.</li>
+      <li>Enter the manager code, drop both files below, check the summary and click <b>Save and publish</b>.</li>
+    </ol>
+    <p class="note">You can add older Open Quotes exports at the same time. Each quote keeps the details from the newest file it appears in, and quotes that later close keep the details from when they were open.</p>
+  </section>
+
+  <section class="card">
+    <h2>1. Manager code</h2>
+    <div class="row">
+      <input id="code" type="password" autocomplete="current-password" aria-label="Manager code" placeholder="Manager code">
+      <button class="btn" id="check" type="button">Check code</button>
+      <span id="code-msg" class="count"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. Files</h2>
+    <label class="drop" id="drop" for="files">Drop the Open Quotes and Closed Quotes Excel files here, or click to choose them.
+      <input id="files" type="file" accept=".xlsx,.xls" multiple hidden>
+    </label>
+    <ul class="files" id="file-list"></ul>
+    <label class="row note" for="replace"><input type="checkbox" id="replace"> Start over: replace all saved data with only these files</label>
+  </section>
+
+  <section class="card">
+    <h2>3. Check and publish</h2>
+    <p id="summary" class="note">Add files to see what will change.</p>
+    <div class="row"><button class="btn" id="publish" type="button" disabled>Save and publish</button><span id="pub-msg" class="count"></span></div>
+  </section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="engine.js"></script>
+<script src="upload.js"></script>
+</body>
+</html>
