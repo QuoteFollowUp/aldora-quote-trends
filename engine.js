@@ -21,6 +21,7 @@
   const addMonths = (mk, n) => { let y = +mk.slice(0, 4), m = +mk.slice(5, 7) - 1 + n; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + '-' + pad(m + 1); };
   const dayNum = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / DAY;
   const pct = (a, b) => (a > 0 ? Math.round((b / a - 1) * 1000) / 10 : null);
+  const d3sum = (a) => a.reduce((s, v) => s + v, 0);
 
   // ---- Excel cell to YYYY-MM-DD (serial numbers, Date objects or text)
   function cellDate(v) {
@@ -130,7 +131,7 @@
     const asOfComplete = +asOf.slice(8, 10) >= lastDay - 1;
     const firstMonth = quotes.reduce((m, x) => (monthKey(x.date) < m ? monthKey(x.date) : m), asOfMonth);
     const months = [];
-    for (let mk = asOfMonth, i = 0; i < 12 && mk >= firstMonth; i++, mk = addMonths(mk, -1)) months.unshift(mk);
+    for (let mk = asOfMonth, i = 0; i < 13 && mk >= firstMonth; i++, mk = addMonths(mk, -1)) months.unshift(mk);
     const mIndex = new Map(months.map((m, i) => [m, i]));
     const lastFull = asOfComplete ? months.length - 1 : months.length - 2;
     const recent = [lastFull - 2, lastFull - 1, lastFull].filter((i) => i >= 0);
@@ -234,19 +235,39 @@
     function volume({ branch, cat, rep, repKey }) {
       const ci = CATS.indexOf(cat);
       const logged = months.map(() => 0), cs = months.map(() => new Set());
+      const single = branch && branch !== 'All branches';
+      // Same-branch series for the year trend: only branches live since the first month, so a new branch does not read as growth
+      const sameLog = months.map(() => 0);
       for (const x of qs) {
-        if (branch && branch !== 'All branches' && x.branch !== branch) continue;
+        if (single && x.branch !== branch) continue;
         if (rep && x.rep !== rep) continue;
         if (repKey && x.repKey !== repKey) continue;
         if (ci >= 0 && !(x.mask & (1 << ci))) continue;
         logged[x.mi]++; cs[x.mi].add(x.branch + '|' + x.cust);
+        if (single || !bStart[x.branch]) sameLog[x.mi]++;
       }
-      const closed = months.map((_, i) => (cat === 'All' && !rep && !repKey ? (branch && branch !== 'All branches' ? (closedM[branch] || [])[i] || 0 : Object.values(closedM).reduce((s, a) => s + a[i], 0)) : 0));
+      const useClosed = cat === 'All' && !rep && !repKey;
+      const closed = months.map((_, i) => (useClosed ? (single ? (closedM[branch] || [])[i] || 0 : Object.values(closedM).reduce((s, a) => s + a[i], 0)) : 0));
+      const sameClosed = months.map((_, i) => (useClosed ? (single ? closed[i] : Object.entries(closedM).reduce((s, [b, a]) => s + (bStart[b] ? 0 : a[i]), 0)) : 0));
       const total = logged.map((n, i) => n + closed[i]);
       const sum = (ix) => ix.reduce((s, i) => s + total[i], 0);
       const r = { logged, closed, total, cust: cs.map((s) => s.size), recent: sum(recent), prior: sum(prior) };
       r.change = pct(r.prior, r.recent);
       r.lastVsPrev = lastFull > 0 ? pct(total[lastFull - 1], total[lastFull]) : null;
+      r.lastMonth = lastFull >= 0 ? total[lastFull] : 0;
+      r.yoy = lastFull >= 12 ? pct(total[lastFull - 12], total[lastFull]) : null;
+      // Year trend: straight line fitted through the full months since the branch started; % change from start to end of the line
+      const start = single ? bStart[branch] || 0 : 0;
+      const ys = [];
+      for (let i = Math.max(start, lastFull - 11); i <= lastFull; i++) ys.push(sameLog[i] + sameClosed[i]);
+      r.trend = null; r.trendFrom = '';
+      if (ys.length >= 4 && d3sum(ys) > 0) {
+        const n = ys.length, mx = (n - 1) / 2, my = d3sum(ys) / n;
+        let num = 0, den = 0; ys.forEach((y, i) => { num += (i - mx) * (y - my); den += (i - mx) * (i - mx); });
+        const slope = num / den, a = my - slope * mx, b0 = a, b1 = a + slope * (n - 1);
+        r.trend = b0 > 0 ? Math.round((b1 / b0 - 1) * 1000) / 10 : null;
+        r.trendFrom = monthLabel(months[lastFull - n + 1]);
+      }
       r.custLast = lastFull >= 0 ? r.cust[lastFull] : 0;
       r.any = total.some((n) => n > 0);
       return r;

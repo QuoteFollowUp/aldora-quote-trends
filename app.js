@@ -68,7 +68,7 @@
     $('rep-select').addEventListener('change', (e) => { repKey = e.target.value; drawReps(); drawCustomers(); });
     $('cust-search').addEventListener('input', (e) => { search = e.target.value.toLowerCase(); drawCustomers(); });
     const W = B.W;
-    $('window-note').textContent = 'Every quote written ' + W.firstUS + ' to ' + W.asOfUS + ', open and closed. Recent is ' + W.recentLabel + ', prior is ' + W.priorLabel + '. Up or down means a move of 10% or more.' + (W.partial ? ' ' + W.labels[W.labels.length - 1] + ' is month to date.' : '');
+    $('window-note').textContent = 'Every quote written ' + W.firstUS + ' to ' + W.asOfUS + ', open and closed. Monthly change compares ' + W.lastFullLabel + ' with ' + W.prevFullLabel + '. Year trend fits a straight line through every full month since ' + W.labels[0] + ' (or since the branch started) and shows the change from start to end of that line, so one odd month does not swing it. Up or down means 10% or more.' + (W.partial ? ' ' + W.labels[W.labels.length - 1] + ' is month to date.' : '');
     const up = (meta.uploads || []).slice(-1)[0];
     $('data-note').textContent = 'Data through ' + W.asOfUS + (up ? '. Last upload ' + new Date(up.at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '') + '. ' + n0(B.quoteCount) + ' quotes with customer detail, plus ' + n0(B.closedCount) + ' closed quotes counted by branch only. Louisville data starts in ' + (B.W.labels[B.bStart['Louisville']] || '') + ', Atlanta in ' + (B.W.labels[B.bStart['Atlanta']] || '') + '. Branches that started partway through are left out of the branch comparison in the summary line.';
   }
@@ -106,10 +106,12 @@
     el.replaceChildren(thead, tb);
   }
   const monthCols = (get) => B.W.labels.map((l, i) => ({ h: l + (B.W.partial && i === B.W.labels.length - 1 ? '*' : ''), key: 'm' + i, v: (r) => get(r)[i], f: n0, cls: (v) => (v ? '' : 'zero') }));
+  // Monthly change, year trend, and same month last year once a year of data exists
+  const hasYoy = () => B.W.lastFull >= 12;
   const windowCols = (getV) => [
-    { h: B.W.priorLabel, key: 'prior', v: (r) => getV(r).prior, f: n0 },
-    { h: B.W.recentLabel, key: 'recent', v: (r) => getV(r).recent, f: n0 },
-    { h: 'Change', key: 'chg', v: (r) => getV(r).change, f: pct, cls: dirCls },
+    { h: B.W.lastFullLabel + ' vs ' + B.W.prevFullLabel, key: 'mom', v: (r) => getV(r).lastVsPrev, f: pct, cls: dirCls },
+    { h: 'Year trend', key: 'trend', v: (r) => getV(r).trend, f: (v, r) => (v == null ? '—' : pct(v) + ' since ' + getV(r).trendFrom), cls: dirCls },
+    ...(hasYoy() ? [{ h: 'vs ' + B.W.lastFullLabel + ' last year', key: 'yoy', v: (r) => getV(r).yoy, f: pct, cls: dirCls }] : []),
   ];
 
   // ---------- header and tiles
@@ -117,24 +119,25 @@
     const W = B.W, f = F(), v = B.volume(f);
     const sc = B.statusCounts(B.customers(f));
     const what = P.cat === 'All' ? 'quotes' : P.cat.toLowerCase() + ' quotes';
-    $('l-recent').textContent = (P.cat === 'All' ? 'Quotes' : P.cat + ' quotes') + ', ' + W.recentLabel;
-    $('l-change').textContent = 'vs ' + W.priorLabel;
-    $('l-month').textContent = W.lastFullLabel + ' vs ' + W.prevFullLabel;
+    $('l-recent').textContent = (P.cat === 'All' ? 'Quotes' : P.cat + ' quotes') + ' in ' + W.lastFullLabel;
+    $('l-change').textContent = W.lastFullLabel + ' vs ' + W.prevFullLabel;
+    $('l-month').textContent = hasYoy() ? 'vs ' + W.lastFullLabel + ' last year' : 'Year trend' + (v.trendFrom ? ', since ' + v.trendFrom : '');
     $('l-cust').textContent = 'Customers quoting in ' + W.lastFullLabel;
-    $('t-recent').textContent = n0(v.recent);
-    $('t-change').textContent = pct(v.change); $('t-change').className = 'big ' + dirCls(v.change);
-    $('t-month').textContent = pct(v.lastVsPrev); $('t-month').className = 'big ' + dirCls(v.lastVsPrev);
+    $('t-recent').textContent = n0(v.lastMonth);
+    $('t-change').textContent = pct(v.lastVsPrev); $('t-change').className = 'big ' + dirCls(v.lastVsPrev);
+    const yr = hasYoy() ? v.yoy : v.trend;
+    $('t-month').textContent = pct(yr); $('t-month').className = 'big ' + dirCls(yr);
     $('t-cust').textContent = n0(v.custLast);
     $('t-drop').textContent = n0(sc['Dropped off']);
     const who = P.rep ? P.rep + (P.branch !== 'All branches' ? ' at ' + P.branch : '') : P.branch;
     let t;
     if (!v.any) t = who + ' has no ' + what + ' in this period.';
     else if (!P.rep && P.branch === 'All branches') {
-      const rows = B.branches.map((b) => ({ b, v: B.volume({ branch: b, cat: P.cat }) })).filter((x) => x.v.prior >= 30 && (B.bStart[x.b] || 0) <= (W.prior[0] ?? 0));
-      const grp = (test) => rows.filter((x) => test(x.v.change)).map((x) => x.b + ' ' + pct(x.v.change)).join(', ');
+      const rows = B.branches.map((b) => ({ b, v: B.volume({ branch: b, cat: P.cat }) })).filter((x) => x.v.trend != null && d3.sum(x.v.total) >= 60);
+      const grp = (test) => rows.filter((x) => test(x.v.trend)).map((x) => x.b + ' ' + pct(x.v.trend) + (x.v.trendFrom !== W.labels[0] ? ' since ' + x.v.trendFrom : '')).join(', ');
       const dn = grp((c) => c <= -5), up = grp((c) => c >= 5), fl = grp((c) => c > -5 && c < 5);
-      t = (P.cat === 'All' ? 'All products' : P.cat) + ', ' + W.recentLabel + ' vs ' + W.priorLabel + '. ' + (dn ? 'Falling: ' + dn + '. ' : '') + (up ? 'Rising: ' + up + '. ' : '') + (fl ? 'Holding: ' + fl + '.' : '');
-    } else t = who + ' wrote ' + n0(v.recent) + ' ' + what + ' in ' + W.recentLabel + ', ' + pct(v.change) + ' vs ' + W.priorLabel + '. ' + W.lastFullLabel + ' was ' + pct(v.lastVsPrev) + ' vs ' + W.prevFullLabel + '. ' + n0(sc['Dropped off']) + ' customers dropped off and ' + n0(sc.Slowing) + ' are slowing.';
+      t = (P.cat === 'All' ? 'All products' : P.cat) + ': ' + n0(v.lastMonth) + ' quotes in ' + W.lastFullLabel + ', ' + pct(v.lastVsPrev) + ' vs ' + W.prevFullLabel + '. Year trend by branch. ' + (dn ? 'Falling: ' + dn + '. ' : '') + (up ? 'Rising: ' + up + '. ' : '') + (fl ? 'Holding: ' + fl + '.' : '');
+    } else t = who + ' wrote ' + n0(v.lastMonth) + ' ' + what + ' in ' + W.lastFullLabel + ', ' + pct(v.lastVsPrev) + ' vs ' + W.prevFullLabel + '. ' + (v.trend != null ? 'Year trend since ' + v.trendFrom + ': ' + pct(v.trend) + '. ' : '') + n0(sc['Dropped off']) + ' customers dropped off and ' + n0(sc.Slowing) + ' are slowing.';
     $('takeaway').textContent = t;
     const fn = [];
     if (P.cat !== 'All') fn.push('Showing only quotes that include ' + P.cat.toLowerCase() + '. Closed quotes are not counted here because the closed export has no line items.');
@@ -159,8 +162,11 @@
       if (!single) { p.tabIndex = 0; p.setAttribute('role', 'button'); p.setAttribute('aria-label', 'Filter to ' + b); const go = () => { P.branch = b; repKey = ''; draw(); }; p.addEventListener('click', go); p.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }); }
       const h = document.createElement('div'); h.className = 'ph';
       const bt = document.createElement('b'); bt.textContent = b;
-      const ch = document.createElement('span'); ch.className = 'chip ' + dirCls(v.change); ch.textContent = (single ? W.recentLabel + ' vs ' + W.priorLabel + ' ' : '') + pct(v.change); ch.title = W.recentLabel + ' vs ' + W.priorLabel;
-      h.append(bt, ch); p.appendChild(h); box.appendChild(p);
+      const chips = document.createElement('span'); chips.style.display = 'inline-flex'; chips.style.gap = '6px'; chips.style.flexWrap = 'wrap';
+      const ch = document.createElement('span'); ch.className = 'chip ' + dirCls(v.lastVsPrev); ch.textContent = (single ? W.lastFullLabel + ' vs ' + W.prevFullLabel + ' ' : W.lastFullLabel + ' ') + pct(v.lastVsPrev); ch.title = W.lastFullLabel + ' vs ' + W.prevFullLabel;
+      const cy = document.createElement('span'); cy.className = 'chip ' + dirCls(v.trend); cy.textContent = (single ? 'Year trend since ' + v.trendFrom + ' ' : 'Yr ') + pct(v.trend); cy.title = 'Year trend since ' + v.trendFrom;
+      chips.append(ch, cy);
+      h.append(bt, chips); p.appendChild(h); box.appendChild(p);
       const total = d3.sum(v.total);
       if (P.cat !== 'All' && total < 20) { const lo = document.createElement('div'); lo.className = 'note'; lo.textContent = 'Only ' + total + ' ' + P.cat.toLowerCase() + ' quote' + (total === 1 ? '' : 's') + ' in this period. Blank months are zero.'; p.appendChild(lo); }
       later.push(() => {
@@ -201,7 +207,6 @@
       { h: 'Branch', txt: true, v: (r) => r.b },
       ...monthCols((r) => r.v.total),
       ...windowCols((r) => r.v),
-      { h: W.lastFullLabel + ' vs ' + W.prevFullLabel, v: (r) => r.v.lastVsPrev, f: pct, cls: dirCls },
       { h: 'Customers ' + W.lastFullLabel, v: (r) => r.v.custLast, f: n0 },
       { h: 'Dropped off', v: (r) => r.sc['Dropped off'], f: n0, cls: (v) => (v ? 'down' : '') },
       { h: 'New', v: (r) => r.sc.New, f: n0 },
@@ -216,16 +221,17 @@
     const rows = B.repGroups(P.branch).map((g) => {
       const f = { repKey: g.key, cat: P.cat };
       const cs = B.customers(f);
-      return { ...g, v: B.volume(f), sc: B.statusCounts(cs), cPrior: cs.filter((x) => x.s.prior > 0).length, cRecent: cs.filter((x) => x.s.recent > 0).length };
-    }).filter((r) => r.v.any).sort((a, b) => tail(a) - tail(b) || b.v.recent - a.v.recent);
+      const lf = B.W.lastFull;
+      return { ...g, v: B.volume(f), sc: B.statusCounts(cs), cPrior: cs.filter((x) => x.s.m[lf - 1] > 0).length, cRecent: cs.filter((x) => x.s.m[lf] > 0).length };
+    }).filter((r) => r.v.any).sort((a, b) => tail(a) - tail(b) || b.v.lastMonth - a.v.lastMonth);
     const W = B.W;
     table($('rep-table'), [
       { h: 'Rep', txt: true, v: (r) => r.rep },
       ...(P.branch === 'All branches' ? [{ h: 'Branch', txt: true, v: (r) => r.branch }] : []),
       ...monthCols((r) => r.v.total),
       ...windowCols((r) => r.v),
-      { h: 'Customers ' + W.priorLabel, v: (r) => r.cPrior, f: n0 },
-      { h: 'Customers ' + W.recentLabel, v: (r) => r.cRecent, f: n0 },
+      { h: 'Customers ' + W.prevFullLabel, v: (r) => r.cPrior, f: n0 },
+      { h: 'Customers ' + W.lastFullLabel, v: (r) => r.cRecent, f: n0 },
       { h: 'Dropped off', v: (r) => r.sc['Dropped off'], f: n0, cls: (v) => (v ? 'down' : 'zero') },
       { h: 'Slowing', v: (r) => r.sc.Slowing, f: n0, cls: (v) => (v ? 'down' : 'zero') },
       { h: 'New', v: (r) => r.sc.New, f: n0, cls: (v) => (v ? 'up' : 'zero') },
