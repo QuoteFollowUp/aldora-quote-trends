@@ -35,8 +35,7 @@
     B = E.build(E.decode(json));
     if (!B) return fail('The saved data has no quotes for the Aldora branches.', true);
     $('gate').hidden = true;
-    initControls();
-    draw();
+    try { initControls(); draw(); } catch (e) { $('takeaway').textContent = 'The dashboard hit an error while drawing: ' + e.message + '. Send this message to Fred.'; console.error(e); }
   }
   function showGate(msg) { $('gate').hidden = false; $('gate-err').textContent = msg; $('gate-code').focus(); }
   function fail(msg, withLink) {
@@ -44,7 +43,12 @@
     $('takeaway').textContent = msg;
     if (withLink) { const a = document.createElement('a'); a.href = 'upload.html'; a.textContent = ' Go to the upload page.'; $('takeaway').appendChild(a); }
   }
-  $('gate-form').addEventListener('submit', (e) => { e.preventDefault(); store.set(CODE_KEY, $('gate-code').value.trim()); load(); });
+  function showError(e) {
+    console.error(e);
+    $('gate-err').textContent = 'Something went wrong opening the dashboard: ' + (e && e.message ? e.message : e) + '. Send this message to Fred.';
+  }
+  function start() { $('gate-err').textContent = 'Opening...'; load().catch(showError); }
+  $('gate-form').addEventListener('submit', (e) => { e.preventDefault(); store.set(CODE_KEY, $('gate-code').value.trim().toLowerCase()); start(); });
   $('signout').addEventListener('click', () => { store.del(CODE_KEY); location.reload(); });
 
   // ---------- controls
@@ -365,5 +369,6 @@
     drawHeader(); drawTrend(); drawRepSelect(); drawReps(); drawCustomers(); drawProducts();
   }
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => B && drawTrend(), 200); });
-  load();
+  if (store.get(CODE_KEY)) $('gate-err').textContent = '';
+  load().catch(showError);
 })();
