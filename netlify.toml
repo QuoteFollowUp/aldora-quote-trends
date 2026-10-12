@@ -8,6 +8,6 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
+    Content-Security-Policy = "frame-ancestors 'self' https://aldora-sales-hub.netlify.app"
     Referrer-Policy = "same-origin"
     X-Content-Type-Options = "nosniff"
