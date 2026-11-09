@@ -22,6 +22,14 @@
   const PAGE = 250; let showAll = false;
 
   // ---------- access and loading
+  // Signed in from the Sales Hub: the hub passes the code as #ac=... once. Save it and wipe it from the address bar.
+  (function takeHubCode() {
+    const m = /[#&]ac=([^&]+)/.exec(location.hash || '');
+    if (!m) return;
+    try { store.set(CODE_KEY, decodeURIComponent(m[1]).trim().toLowerCase()); } catch (e) {}
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  })();
+
   async function load() {
     const code = store.get(CODE_KEY);
     if (!code) return showGate('');
@@ -31,7 +39,17 @@
     if (res.status === 404) return fail('The server functions are not running (404). In Netlify, check Deploys for a failed deploy and Logs > Functions for data and upload.');
     if (!res.ok) { const j = await res.json().catch(() => ({})); return fail('The server returned an error (' + res.status + '). ' + (j.error || 'Try again in a minute.')); }
     $('gate-err').textContent = 'Downloading the latest data...';
+    let viewer = null;
+    try { viewer = JSON.parse(decodeURIComponent(res.headers.get('x-viewer') || '')); } catch (e) {}
+    if (viewer) {
+      $('whoami').textContent = (viewer.name ? viewer.name + ' · ' : '') + viewer.label;
+      $('whoami').hidden = false;
+      $('upload-link').hidden = viewer.role !== 'all';
+    } else {
+      $('upload-link').hidden = false;
+    }
     const json = await res.json();
+    if (json.empty && json.scoped) { $('gate').hidden = true; return fail('No quotes for your customers in the latest upload yet.'); }
     if (json.empty) return fail('No data yet. A manager needs to upload the open and closed quote exports on the upload page.', true);
     meta = json;
     B = E.build(E.decode(json));

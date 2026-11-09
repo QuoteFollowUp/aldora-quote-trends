@@ -104,3 +104,7 @@ td.sel input, th.sel input { accent-color: var(--accent); cursor: pointer; }
 .coo-grp { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .coo-grp label { cursor: pointer; }
 .coo-br { font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+
+/* signed-in label */
+.whoami { font-size: 13px; font-weight: 600; color: #115E67; background: #E6F0F1; padding: 4px 10px; border-radius: 99px; margin-right: 10px; }
+.gate-note { font-size: 13px; color: #5E6E78; margin: 8px 0 0; max-width: 300px; }

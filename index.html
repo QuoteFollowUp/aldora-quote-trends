@@ -15,10 +15,11 @@
 <div class="gate" id="gate" hidden>
   <form id="gate-form">
     <img src="logo.png" alt="Aldora">
-    <label for="gate-code">Team access code</label>
+    <label for="gate-code">Your Call Log access code</label>
     <input id="gate-code" type="password" autocomplete="current-password" required>
     <button class="btn" type="submit">Open dashboard</button>
     <p class="err" id="gate-err"></p>
+    <p class="gate-note">Same code you use in the Quote Follow-Up and Call Log app. You'll see your own customers.</p>
   </form>
 </div>
 
@@ -39,7 +40,7 @@
       <h1>Quote volume trends</h1>
       <p class="take" id="takeaway"><span class="skeleton">Loading the latest upload</span></p>
       <p class="sub" id="window-note"></p>
-      <div class="toplinks"><a href="upload.html">Upload this week's files</a><button class="linkbtn" id="signout" type="button">Sign out</button></div>
+      <div class="toplinks"><span class="whoami" id="whoami" hidden></span><a href="upload.html" id="upload-link" hidden>Upload this week's files</a><button class="linkbtn" id="signout" type="button">Sign out</button></div>
     </header>
   </div>
 

@@ -11,3 +11,25 @@
     Content-Security-Policy = "frame-ancestors 'self' https://aldora-sales-hub.netlify.app"
     Referrer-Policy = "same-origin"
     X-Content-Type-Options = "nosniff"
+
+# Keep server code and config files off the public site (pages and /api/* still work).
+[[redirects]]
+  from = "/netlify/*"
+  to = "/not-found"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/package.json"
+  to = "/not-found"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/netlify.toml"
+  to = "/not-found"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/README.md"
+  to = "/not-found"
+  status = 404
+  force = true
