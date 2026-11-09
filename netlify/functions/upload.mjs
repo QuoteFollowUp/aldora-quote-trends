@@ -9,7 +9,8 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, 
 export default async (req) => {
   const { MANAGER_CODE } = process.env;
   if (!MANAGER_CODE) return json({ error: 'Set MANAGER_CODE in Netlify environment variables, then redeploy.' }, 500);
-  if (req.headers.get('x-manager-code') !== MANAGER_CODE) return json({ error: 'Unauthorized' }, 401);
+  const norm = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!norm(req.headers.get('x-manager-code')) || norm(req.headers.get('x-manager-code')) !== norm(MANAGER_CODE)) return json({ error: 'Unauthorized' }, 401);
   if (req.method === 'GET') return json({ ok: true });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
