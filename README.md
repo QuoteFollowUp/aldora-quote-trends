@@ -11,7 +11,7 @@ Quote volume by branch, rep, product and customer, from the weekly Open Quotes a
 3. Deploys > Trigger deploy > Deploy site, so the codes take effect.
 
 ## Weekly
-1. Run Open Quotes (01/01/2026 or 12 months back, through today) and Closed Quotes. Save as Excel.
+1. Run Open Quotes (01/01/2026 or 12 months back, through today) and Closed Quotes. Save as Excel. Once, also upload an Open Quotes run from 01/01/2025 so the customer chart can compare each month with the same month last year. Uploads are kept for 25 months.
 2. Open `/upload.html`, enter the manager code, drop both files, check the summary, click Save and publish.
 
 ## How the data works

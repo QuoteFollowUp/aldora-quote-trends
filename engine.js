@@ -116,7 +116,7 @@
     for (const f of closedFiles) for (const c of f.rows) cmap.set(c.loc + '|' + c.ord, c);
     let quotes = [...map.values()];
     const maxDate = quotes.reduce((m, x) => (x.date > m ? x.date : m), '');
-    const keepFrom = maxDate ? addMonths(monthKey(maxDate), -17) + '-01' : '';
+    const keepFrom = maxDate ? addMonths(monthKey(maxDate), -25) + '-01' : '';
     quotes = quotes.filter((x) => x.date >= keepFrom);
     const uploads = (existing.uploads || []).concat([{ at: new Date().toISOString(), files: note || [], added, updated, quotes: quotes.length, closed: cmap.size, through: maxDate }]).slice(-60);
     return { ds: { quotes, closed: [...cmap.values()], uploads, assign: existing.assign || [], updated: new Date().toISOString() }, added, updated };
@@ -199,6 +199,20 @@
       c.products = pc.map((p) => p[0] + ' (' + p[1] + ')').join(', ') || 'Other';
       c.recentQuotes = c.quotes.slice(-3).reverse().map((x) => ({ date: toUS(x.date), quote: x.ord, total: x.total, products: CATS.filter((cat, i) => x.mask & (1 << i)).join(' + ') || 'Other' }));
     }
+    // Same month last year, per customer: quote count and dollars for the 12 months before each month shown
+    const lyIdx = new Map(months.map((m, i) => [addMonths(m, -12), i]));
+    const lyHave = months.map(() => 0);
+    for (const x of quotes) {
+      const i = lyIdx.get(monthKey(x.date)); if (i == null) continue;
+      const br = branchName(x.loc); lyHave[i]++;
+      const c = custMap.get(br + '|' + x.site); if (!c) continue;
+      if (!c.ly) c.ly = { n: months.map(() => 0), amt: months.map(() => 0) };
+      c.ly.n[i]++; c.ly.amt[i] += +x.total || 0;
+    }
+    for (const c of custs) { c.amt = months.map(() => 0); c.quotes.forEach((x) => { c.amt[x.mi] += +x.total || 0; }); }
+    W.lyHave = lyHave.map((n) => n >= 20);
+    W.lyLabels = months.map((m) => monthLabel(m) + ' ' + addMonths(m, -12).slice(2, 4));
+    W.tyLabels = months.map((m) => monthLabel(m) + ' ' + m.slice(2, 4));
     // Rep groups per branch: home branch, or 5%+ of the branch's quotes
     const repBranch = new Map(), branchTot = new Map();
     for (const c of custs) { const n = c.quotes.length; const k = c.rep + '|' + c.branch; repBranch.set(k, (repBranch.get(k) || 0) + n); branchTot.set(c.branch, (branchTot.get(c.branch) || 0) + n); }

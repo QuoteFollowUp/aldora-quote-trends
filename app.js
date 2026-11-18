@@ -287,7 +287,7 @@
     all.addEventListener('change', () => { list.forEach((x) => (all.checked ? picked.add(pkey(x.c)) : picked.delete(pkey(x.c)))); drawCustomers(); });
     table($('cust-table'), [
       { check: all, cell: (td, x, row) => { td.className = 'sel'; const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = picked.has(pkey(x.c)); cb.setAttribute('aria-label', 'Select ' + x.c.customer); cb.addEventListener('change', () => { cb.checked ? picked.add(pkey(x.c)) : picked.delete(pkey(x.c)); row.classList.toggle('picked', cb.checked); updateSel(); }); td.appendChild(cb); } },
-      { h: 'Customer', key: 'customer', txt: true, v: (x) => x.c.customer },
+      { h: 'Customer', key: 'customer', txt: true, cell: (td, x) => { td.className = 'txt'; const b = document.createElement('button'); b.type = 'button'; b.className = 'cust-link'; b.textContent = x.c.customer; b.title = 'Compare this year with last year'; b.addEventListener('click', () => openYoy(x.c)); td.appendChild(b); } },
       ...(P.branch === 'All branches' ? [{ h: 'Branch', key: 'branch', txt: true, v: (x) => x.c.branch }] : []),
       { h: 'Rep', key: 'rep', txt: true, v: (x) => x.c.rep },
       { h: 'Contact', key: 'contact', txt: true, v: (x) => x.c.contact },
@@ -321,6 +321,53 @@
     sel.replaceChildren(new Option('All reps', ''), ...groups.map((g) => new Option(P.branch === 'All branches' ? g.rep + ' · ' + g.branch : g.rep, g.key)));
     if (repKey && !groups.some((g) => g.key === repKey)) repKey = '';
     sel.value = repKey;
+  }
+
+  // ---------- customer: this year vs last year, month by month
+  let yoyC = null, yoyM = 'n', yoyBack = null;
+  function openYoy(c) { yoyC = c; yoyBack = document.activeElement; drawYoy(); $('yoy-modal').hidden = false; $('yoy-close').focus(); }
+  function closeYoy() { $('yoy-modal').hidden = true; if (yoyBack && yoyBack.focus) yoyBack.focus(); }
+  $('yoy-close').addEventListener('click', closeYoy);
+  $('yoy-modal').addEventListener('click', (e) => { if (e.target.id === 'yoy-modal') closeYoy(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('yoy-modal').hidden) closeYoy(); });
+  $('yoy-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; yoyM = b.dataset.v; $('yoy-seg').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawYoy(); });
+  function drawYoy() {
+    const W = B.W, c = yoyC; if (!c) return;
+    const isAmt = yoyM === 'amt', fmt = isAmt ? (v) => (v >= 1000 ? '$' + d3.format(',.0f')(v / 1000) + 'K' : money(v)) : n0, fmtFull = isAmt ? money : n0;
+    const ty = isAmt ? c.amt : c.stats.All.m, ly = c.ly ? (isAmt ? c.ly.amt : c.ly.n) : W.months.map(() => 0);
+    // Last 12 months only, so every bar pair is a month this year next to the same month last year
+    const off = Math.max(0, W.months.length - 12), pick = (a) => a.slice(off);
+    const tyA = pick(ty), lyA = pick(ly), have = pick(W.lyHave), labels = pick(W.tyLabels), lyLabels = pick(W.lyLabels), n = tyA.length, partial = W.partial ? n - 1 : -1;
+    $('yoy-title').textContent = c.customer;
+    $('yoy-sub').textContent = c.branch + ' · ' + c.rep + (c.contact ? ' · ' + c.contact : '') + (c.phone ? ' ' + c.phone : '') + '. All products.';
+    // chart
+    const cw = 900, ch = 260, pad = { t: 22, b: 40, l: 8, r: 8 }, gw = (cw - pad.l - pad.r) / n, bw = Math.min(26, gw * 0.36);
+    const mx = Math.max(1, ...tyA, ...lyA.map((v, i) => (have[i] ? v : 0)));
+    const H = (v) => (v / mx) * (ch - pad.t - pad.b);
+    let g = '<line x1="' + pad.l + '" x2="' + (cw - pad.r) + '" y1="' + (ch - pad.b) + '" y2="' + (ch - pad.b) + '" stroke="currentColor" opacity=".25"/>';
+    for (let i = 0; i < n; i++) {
+      const cx = pad.l + gw * i + gw / 2, x1 = cx - bw - 1, x2 = cx + 1, base = ch - pad.b;
+      if (have[i]) { const h = H(lyA[i]); g += '<rect class="ly" x="' + x1.toFixed(1) + '" y="' + (base - h).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h, lyA[i] ? 1 : 0).toFixed(1) + '" rx="2"><title>' + lyLabels[i] + ': ' + fmtFull(lyA[i]) + '</title></rect>' + (lyA[i] ? '<text class="v" x="' + (x1 + bw / 2).toFixed(1) + '" y="' + (base - h - 4).toFixed(1) + '" text-anchor="middle">' + fmt(lyA[i]) + '</text>' : ''); }
+      else g += '<rect class="nd" x="' + x1.toFixed(1) + '" y="' + (base - 3) + '" width="' + bw.toFixed(1) + '" height="3"><title>' + lyLabels[i] + ': no quotes loaded for that month</title></rect>';
+      const h2 = H(tyA[i]); g += '<rect class="ty" x="' + x2.toFixed(1) + '" y="' + (base - h2).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(h2, tyA[i] ? 1 : 0).toFixed(1) + '" rx="2"' + (i === partial ? ' opacity=".55"' : '') + '><title>' + labels[i] + ': ' + fmtFull(tyA[i]) + (i === partial ? ' (month to date)' : '') + '</title></rect>' + (tyA[i] ? '<text class="v" x="' + (x2 + bw / 2).toFixed(1) + '" y="' + (base - h2 - 4).toFixed(1) + '" text-anchor="middle">' + fmt(tyA[i]) + '</text>' : '');
+      g += '<text x="' + cx.toFixed(1) + '" y="' + (base + 15) + '" text-anchor="middle">' + labels[i] + (i === partial ? '*' : '') + '</text>';
+      const ch1 = have[i] && lyA[i] > 0 && i !== partial ? (tyA[i] / lyA[i] - 1) * 100 : null;
+      if (ch1 != null) g += '<text x="' + cx.toFixed(1) + '" y="' + (base + 30) + '" text-anchor="middle" style="font-weight:600;fill:' + (ch1 >= 10 ? 'var(--ok)' : ch1 <= -10 ? 'var(--bad)' : 'var(--muted)') + '">' + (ch1 > 0 ? '+' : '') + Math.round(ch1) + '%</text>';
+    }
+    $('yoy-chart').innerHTML = '<svg viewBox="0 0 ' + cw + ' ' + ch + '" role="img" aria-label="' + esc(c.customer) + ' quotes by month, this year next to last year">' + g + '</svg>';
+    // summary: months with last-year data, full months only
+    const both = tyA.map((_, i) => i).filter((i) => have[i] && i !== partial);
+    const sTy = both.reduce((s, i) => s + tyA[i], 0), sLy = both.reduce((s, i) => s + lyA[i], 0);
+    $('yoy-take').innerHTML = both.length
+      ? '<b>' + labels[both[0]] + (both.length > 1 ? '–' + labels[both[both.length - 1]] : '') + ':</b> ' + fmtFull(sTy) + ' this year vs ' + fmtFull(sLy) + ' last year' + (sLy > 0 ? ', <b class="' + (sTy >= sLy ? 'up' : 'down') + '">' + (sTy >= sLy ? '+' : '') + Math.round((sTy / sLy - 1) * 100) + '%</b>' : sTy > 0 ? '. No quotes in those months last year.' : '') + '.'
+      : 'No quotes from last year are loaded for these months yet, so only this year shows. Upload an Open Quotes export that starts 12 months earlier to fill in last year.';
+    // table
+    const t = $('yoy-table'); t.innerHTML = '';
+    const rows = tyA.map((_, i) => i);
+    const thead = '<thead><tr><th class="txt">Month</th><th>Last year</th><th>This year</th><th>Change</th></tr></thead>';
+    const body = rows.map((i) => { const d = have[i] ? tyA[i] - lyA[i] : null; return '<tr><td class="txt">' + labels[i] + (i === partial ? '* (to date)' : '') + '</td><td>' + (have[i] ? fmtFull(lyA[i]) : '<span class="m">not loaded</span>') + '</td><td>' + fmtFull(tyA[i]) + '</td><td class="' + (d == null || i === partial ? '' : d > 0 ? 'up' : d < 0 ? 'down' : '') + '">' + (d == null || i === partial ? '—' : (d > 0 ? '+' : '') + fmtFull(d)) + '</td></tr>'; }).join('');
+    t.innerHTML = thead + '<tbody>' + body + '</tbody>';
+    $('yoy-note').textContent = 'Each month is compared with the same month a year earlier at ' + c.branch + '. "Not loaded" means the uploads do not reach back to that month yet. * Month to date.';
   }
 
   // ---------- call lists

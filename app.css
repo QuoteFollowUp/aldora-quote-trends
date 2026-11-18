@@ -108,3 +108,21 @@ td.sel input, th.sel input { accent-color: var(--accent); cursor: pointer; }
 /* signed-in label */
 .whoami { font-size: 13px; font-weight: 600; color: #115E67; background: #E6F0F1; padding: 4px 10px; border-radius: 99px; margin-right: 10px; }
 .gate-note { font-size: 13px; color: #5E6E78; margin: 8px 0 0; max-width: 300px; }
+
+/* Customer: this year vs last year */
+.cust-link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); font-weight: 600; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; }
+.cust-link:hover, .cust-link:focus-visible { text-decoration-color: currentColor; }
+.yoy-box { width: min(100%, 60rem); }
+.yoy-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.yoy-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.yoy-key { display: flex; gap: 16px; font-size: 13px; color: var(--muted); }
+.yoy-key i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.yoy-key i.ly, #yoy-chart .ly { background: #a9c3c7; fill: #a9c3c7; }
+.yoy-key i.ty, #yoy-chart .ty { background: var(--accent); fill: var(--accent); }
+#yoy-chart svg { width: 100%; height: auto; display: block; }
+#yoy-chart text { fill: var(--muted); font-size: 11px; font-family: var(--sans); }
+#yoy-chart text.v { fill: var(--fg); font-weight: 600; font-size: 10px; }
+#yoy-chart .nd { fill: var(--line); }
+.yoy-take { background: var(--wash); border-left: 4px solid var(--accent); padding: 8px 12px; font-size: 14px; }
+#yoy-table td.up { color: var(--ok); font-weight: 600; } #yoy-table td.down { color: var(--bad); font-weight: 600; }
+.yoy-box .seg { align-self: flex-start; flex: 0 0 auto; }
