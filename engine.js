@@ -190,7 +190,9 @@
     }
     const custs = [...custMap.values()];
     for (const c of custs) {
-      c.rep = [...c.reps.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0][0];
+      // A quote with no salesperson never outvotes a named rep
+      const named = [...c.reps.entries()].filter((e) => e[0] !== 'Unassigned');
+      c.rep = (named.length ? named : [...c.reps.entries()]).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0][0];
       c.loc = c.quotes[0].loc;
       c.cid = (c.quotes.slice().reverse().find((x) => x.cid) || {}).cid || '';
       const ov = assignMap.get(c.loc + '|' + c.cid) || assignMap.get(c.loc + '|N:' + c.customer.toUpperCase());
