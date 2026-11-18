@@ -23,7 +23,7 @@
   function listFiles() {
     $('file-list').replaceChildren(...parsed.map((f) => {
       const li = document.createElement('li');
-      li.textContent = f.error ? f.name + ': ' + f.error : f.name + ': ' + (f.type === 'open' ? 'Open Quotes, ' + fmt(f.rows.length) + ' quotes through ' + E.toUS(f.maxDate) : 'Closed Quotes, ' + fmt(f.rows.length) + ' closed quotes');
+      li.textContent = f.error ? f.name + ': ' + f.error : f.name + ': ' + (f.type === 'open' ? (f.log ? 'Call Log Open Quotes, ' : 'Open Quotes, ') + fmt(f.rows.length) + ' quotes through ' + E.toUS(f.maxDate) + (f.log && f.rows.skipped ? ' (left out: ' + [f.rows.skipped.noDate ? fmt(f.rows.skipped.noDate) + ' with no date' : '', f.rows.skipped.verbal ? fmt(f.rows.skipped.verbal) + ' verbal V- quotes' : '', f.rows.skipped.badNumber ? fmt(f.rows.skipped.badNumber) + ' with no usable quote number' : ''].filter(Boolean).join(', ') + ')' : '') : 'Closed Quotes, ' + fmt(f.rows.length) + ' closed quotes');
       li.className = f.error ? 'bad' : 'ok';
       return li;
     }));
@@ -38,9 +38,9 @@
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
       const type = E.detect(rows);
       if (!type) throw new Error('not an Open Quotes or Closed Quotes export (columns not recognized)');
-      entry.type = type;
-      entry.rows = type === 'open' ? E.parseOpen(rows) : E.parseClosed(rows);
-      entry.maxDate = type === 'open' ? entry.rows.reduce((m, x) => (x.date > m ? x.date : m), '') : '';
+      entry.type = type === 'log' ? 'open' : type; entry.log = type === 'log';
+      entry.rows = type === 'log' ? E.parseLog(rows) : type === 'open' ? E.parseOpen(rows) : E.parseClosed(rows);
+      entry.maxDate = entry.type === 'open' ? entry.rows.reduce((m, x) => (x.date > m ? x.date : m), '') : '';
       delete entry.error;
     } catch (e) { entry.error = e.message || 'could not read this file'; }
     listFiles();

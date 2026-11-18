@@ -15,6 +15,7 @@ Quote volume by branch, rep, product and customer, from the weekly Open Quotes a
 2. Open `/upload.html`, enter the manager code, drop both files, check the summary, click Save and publish.
 
 ## How the data works
+- Three file types are accepted: the FeneVision Open Quotes export, the FeneVision Closed Quotes export, and the Call Log app's Open Quotes export (Customer, Quote #, Amount, Date, Rep, Facility, Product). Call Log quote numbers are cleaned up (21 SQ 50800 REV 3 becomes 21-SQ50800; a bare number gets the facility prefix). Verbal V- quotes and quotes with no date are skipped. When a quote is already saved, details the new file lacks (customer number, phone, contact) are kept.
 - Files are read in the browser and merged with earlier uploads. A quote keeps the details from the newest file it appears in. Quotes that close later keep the details from when they were open.
 - Closed quotes that never appeared in an open export are counted by branch and month only (the closed export has no customer, rep or products).
 - Data is stored in Netlify Blobs (store `quote-trends`, key `dataset.json.gz`). The previous version is kept as `dataset-prev.json.gz`.

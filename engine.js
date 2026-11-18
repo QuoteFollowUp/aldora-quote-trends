@@ -45,6 +45,7 @@
   // ---- Identify and parse one sheet given as an array of row objects (header names as keys)
   function detect(rows) {
     const h = rows.length ? Object.keys(rows[0]) : [];
+    if (h.includes('Customer') && h.includes('Quote #') && h.includes('Amount') && h.includes('Facility')) return 'log';
     if (h.includes('OrderNumber') && h.includes('Insulated') && h.includes('OrderTotal')) return 'open';
     if (h.includes('OrderNumber') && h.includes('ClosedDate')) return 'closed';
     return null;
@@ -67,6 +68,46 @@
         total: Math.round(num(r.OrderTotal) * 100) / 100, mask,
       });
     }
+    return out;
+  }
+  // Open Quotes export from the Call Log / Quote Follow-Up app: Customer, Job/Project, Quote #, Amount, Date (Jul 2, 2026), Rep, Facility, Contact, Product ("Storefront $2,141,226, VistaView $791,711")
+  const PREFIX_LOC = { '11': 'CHS SC', '21': 'CS FL', '23': 'ORL FL', '25': 'LPG KY', '26': 'ATL GA', '27': 'NN VA' };
+  const FAC_LOC = { 'CHS SC': 'CHS SC', CHARLESTON: 'CHS SC', 'CS FL': 'CS FL', 'CORAL SPRINGS': 'CS FL', 'ORL FL': 'ORL FL', ORLANDO: 'ORL FL', 'LPG KY': 'LPG KY', LOUISVILLE: 'LPG KY', 'ATL GA': 'ATL GA', ATLANTA: 'ATL GA', 'NN VA': 'NN VA', 'NEWPORT NEWS': 'NN VA' };
+  const LOC_PREFIX = Object.fromEntries(Object.entries(PREFIX_LOC).map(([p, l]) => [l, p]));
+  const MONTHS3 = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  function logDate(v) {
+    if (typeof v === 'number' || v instanceof Date) return cellDate(v);
+    const s = String(v || '').trim(), m = s.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/);
+    if (m && MONTHS3[m[1].toLowerCase()]) return ymd(+m[3], MONTHS3[m[1].toLowerCase()], +m[2]);
+    return cellDate(s);
+  }
+  function parseLog(rows) {
+    const out = [], skipped = { noDate: 0, verbal: 0, badNumber: 0 };
+    for (const r of rows) {
+      const site = String(r.Customer == null ? '' : r.Customer).trim();
+      if (!site || site === 'TEST SITE 1') continue;
+      const raw = String(r['Quote #'] == null ? '' : r['Quote #']).trim().toUpperCase();
+      if (/^V-/.test(raw)) { skipped.verbal++; continue; }
+      const facLoc = FAC_LOC[String(r.Facility || '').trim().toUpperCase()] || '';
+      // 21-SQ84148, 21 SQ 50800 REV 3, 21SQ-4628, SQ73913, 60677
+      const m = raw.replace(/\s*REV\s*\d*\s*$/, '').match(/^(?:(\d\d)\s*-?\s*)?(?:SQ)?\s*-?\s*(\d{3,})\.?$/);
+      const loc = (m && m[1] && PREFIX_LOC[m[1]]) || facLoc;
+      if (!m || !loc) { skipped.badNumber++; continue; }
+      const date = logDate(r.Date);
+      if (!date) { skipped.noDate++; continue; }
+      const ord = ((m[1] && PREFIX_LOC[m[1]]) ? m[1] : LOC_PREFIX[loc]) + '-SQ' + m[2];
+      const prod = String(r.Product || '');
+      let mask = 0;
+      CATS.forEach((c, i) => { if (new RegExp('\\b' + c + '\\b', 'i').test(prod)) mask |= 1 << i; });
+      const contact = clean(r.Contact);
+      out.push({
+        loc, ord, date, site, cid: '',
+        contact: /^(none identified|company.*)$/i.test(contact) ? '' : contact,
+        phone: '', rep: clean(r.Rep) || 'Unassigned',
+        total: Math.round(num(r.Amount) * 100) / 100, mask,
+      });
+    }
+    out.skipped = skipped;
     return out;
   }
   function parseClosed(rows) {
@@ -110,7 +151,11 @@
     for (const qq of existing.quotes) map.set(qq.loc + '|' + qq.ord, qq);
     let added = 0, updated = 0;
     const sorted = openFiles.slice().sort((a, b) => (a.maxDate < b.maxDate ? -1 : 1));
-    for (const f of sorted) for (const qq of f.rows) { const k = qq.loc + '|' + qq.ord; if (map.has(k)) updated++; else added++; map.set(k, qq); }
+    for (const f of sorted) for (const qq of f.rows) {
+      const k = qq.loc + '|' + qq.ord, prev = map.get(k);
+      if (prev) { updated++; map.set(k, { ...qq, site: prev.site || qq.site, cid: qq.cid || prev.cid, contact: qq.contact || prev.contact, phone: qq.phone || prev.phone, mask: qq.mask || prev.mask, rep: qq.rep && qq.rep !== 'Unassigned' ? qq.rep : prev.rep }); }
+      else { added++; map.set(k, qq); }
+    }
     const cmap = new Map();
     for (const c of existing.closed) cmap.set(c.loc + '|' + c.ord, c);
     for (const f of closedFiles) for (const c of f.rows) cmap.set(c.loc + '|' + c.ord, c);
@@ -358,5 +403,5 @@
     return out;
   }
 
-  root.QuoteEngine = { BRANCHES, CATS, parseAccountList, detect, parseOpen, parseClosed, encode, decode, merge, build, toUS, pct };
+  root.QuoteEngine = { BRANCHES, CATS, parseAccountList, detect, parseOpen, parseLog, parseClosed, encode, decode, merge, build, toUS, pct };
 })(typeof window !== 'undefined' ? window : globalThis);
