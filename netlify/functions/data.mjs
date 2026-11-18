@@ -40,7 +40,7 @@ function signIn(code) {
 // Applied as extra rep assignments after the manager's saved ones, so every view agrees. Cached 5 minutes.
 const HUB_URL = () => process.env.HUB_URL || 'https://aldora-sales-hub.netlify.app';
 const acctKey = (s) => String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ')
-  .replace(/\b(inc|llc|co|corp|corporation|company|ltd|the)\b/g, ' ').replace(/\s+/g, '');
+  .replace(/\bisland glass\s*,?\s*ltd\b/g, " island glass limited ").replace(/\b(inc|llc|co|corp|corporation|company|ltd|the)\b/g, ' ').replace(/\s+/g, '');
 // (no spaces, so "DANNYS GLASS INC" from the ERP matches "Danny's Glass, Inc." from a rep list)
 const repKey = (r) => String(r || '').toLowerCase().replace(/[^a-z]/g, '').replace(/(.)\1/g, '$1');
 let HUB = { at: 0, changes: null };
