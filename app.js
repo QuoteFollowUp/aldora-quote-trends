@@ -338,7 +338,7 @@
     const ty = all ? (isAmt ? all.amt : all.n) : isAmt ? c.amt : c.stats.All.m, ly = all ? (isAmt ? all.lyAmt : all.lyN) : c.ly ? (isAmt ? c.ly.amt : c.ly.n) : W.months.map(() => 0);
     // Last 12 months only, so every bar pair is a month this year next to the same month last year
     const off = Math.max(0, W.months.length - 12), pick = (a) => a.slice(off);
-    const tyA = pick(ty), lyA = pick(ly), have = pick(W.lyHave), labels = pick(W.tyLabels), lyLabels = pick(W.lyLabels), n = tyA.length, partial = W.partial ? n - 1 : -1;
+    const tyA = pick(ty), lyA = pick(ly), have = pick(all && all.have ? all.have : W.lyHave), labels = pick(W.tyLabels), lyLabels = pick(W.lyLabels), n = tyA.length, partial = W.partial ? n - 1 : -1;
     $('yoy-title').textContent = c.customer;
     const brs = all ? Object.entries(all.br).sort((a, b) => b[1].ty + b[1].ly - a[1].ty - a[1].ly) : [[c.branch, null]];
     $('yoy-sub').textContent = (brs.length > 1 ? 'Combined: ' + brs.map(([b, v]) => b + ' ' + n0(v.ty) + ' this year / ' + n0(v.ly) + ' last year').join(', ') : brs[0][0]) + ' · ' + c.rep + (c.contact ? ' · ' + c.contact : '') + (c.phone ? ' ' + c.phone : '') + '. All products.';

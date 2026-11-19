@@ -260,7 +260,7 @@
     W.lyHave = lyHave.map((n) => n >= 20);
     // One customer across every branch, by name: this year and last year by month
     const nameKey = (n) => String(n || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\b(inc|llc|co|corp|ltd|the)\b/g, ' ').replace(/\s+/g, ' ').trim();
-    const byName = new Map();
+    const byName = new Map(), lyBr = {};
     const zero = () => months.map(() => 0);
     for (const x of quotes) {
       const mk = monthKey(x.date), ti = mIndex.get(mk), li = lyIdx.get(mk);
@@ -268,6 +268,7 @@
       const k = nameKey(x.site) + '|' + branchName(x.loc); let e = byName.get(k);
       if (!e) { e = { n: zero(), amt: zero(), lyN: zero(), lyAmt: zero(), br: {} }; byName.set(k, e); }
       const br = branchName(x.loc), t = +x.total || 0;
+      if (li != null) { if (!lyBr[br]) lyBr[br] = zero(); lyBr[br][li]++; }
       if (!e.br[br]) e.br[br] = { ty: 0, ly: 0 };
       if (ti != null) { e.n[ti]++; e.amt[ti] += t; e.br[br].ty++; }
       if (li != null) { e.lyN[li]++; e.lyAmt[li] += t; e.br[br].ly++; }
@@ -281,6 +282,9 @@
         any = true; out.br[kb] = { ty: e.br[kb].ty, ly: e.br[kb].ly };
         for (const f of ['n', 'amt', 'lyN', 'lyAmt']) e[f].forEach((v, i) => { out[f][i] += v; });
       }
+      // Last year counts only where one of these branches had quotes loaded for that month
+      const bl = Object.keys(out.br);
+      out.have = months.map((_, i) => bl.some((b) => (lyBr[b] || [])[i] >= 20));
       return any ? out : null;
     };
     W.nameKey = nameKey;
