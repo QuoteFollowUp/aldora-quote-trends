@@ -239,7 +239,7 @@
       c.quotes.push(x);
     }
     const custs = [...custMap.values()];
-    const RO0 = root.QT_ROSTER, rosterKey = (n) => String(n || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\b(inc|llc|co|corp|ltd|the|company|incorporated)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    const RO0 = root.QT_ROSTER, rosterKey = (n) => String(n || '').toLowerCase().replace(/\briverside glass\s*(?:&|and)?\s*mirror\s*,?\s*llc\b/g, ' riverside glass and mirror georgia ').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\b(inc|llc|co|corp|ltd|the|company|incorporated)\b/g, ' ').replace(/\s+/g, ' ').trim();
     let RO = null;
     if (RO0 && RO0.lists) {
       RO = { reps: new Set(Object.keys(RO0.lists)), aliases: RO0.aliases || {}, byCust: new Map() };
@@ -281,7 +281,7 @@
     for (const c of custs) { c.amt = months.map(() => 0); c.quotes.forEach((x) => { c.amt[x.mi] += +x.total || 0; }); }
     W.lyHave = lyHave.map((n) => n >= 20);
     // One customer across every branch, by name: this year and last year by month
-    const nameKey = (n) => String(n || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\b(inc|llc|co|corp|ltd|the)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    const nameKey = (n) => String(n || '').toLowerCase().replace(/\briverside glass\s*(?:&|and)?\s*mirror\s*,?\s*llc\b/g, ' riverside glass and mirror georgia ').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\b(inc|llc|co|corp|ltd|the)\b/g, ' ').replace(/\s+/g, ' ').trim();
     const byName = new Map(), lyBr = {};
     const zero = () => months.map(() => 0);
     for (const x of quotes) {
