@@ -334,12 +334,14 @@
   function drawYoy() {
     const W = B.W, c = yoyC; if (!c) return;
     const isAmt = yoyM === 'amt', fmt = isAmt ? (v) => (v >= 1000 ? '$' + d3.format(',.0f')(v / 1000) + 'K' : money(v)) : n0, fmtFull = isAmt ? money : n0;
-    const ty = isAmt ? c.amt : c.stats.All.m, ly = c.ly ? (isAmt ? c.ly.amt : c.ly.n) : W.months.map(() => 0);
+    const all = W.yoy && W.yoy(c.customer);
+    const ty = all ? (isAmt ? all.amt : all.n) : isAmt ? c.amt : c.stats.All.m, ly = all ? (isAmt ? all.lyAmt : all.lyN) : c.ly ? (isAmt ? c.ly.amt : c.ly.n) : W.months.map(() => 0);
     // Last 12 months only, so every bar pair is a month this year next to the same month last year
     const off = Math.max(0, W.months.length - 12), pick = (a) => a.slice(off);
     const tyA = pick(ty), lyA = pick(ly), have = pick(W.lyHave), labels = pick(W.tyLabels), lyLabels = pick(W.lyLabels), n = tyA.length, partial = W.partial ? n - 1 : -1;
     $('yoy-title').textContent = c.customer;
-    $('yoy-sub').textContent = c.branch + ' · ' + c.rep + (c.contact ? ' · ' + c.contact : '') + (c.phone ? ' ' + c.phone : '') + '. All products.';
+    const brs = all ? Object.entries(all.br).sort((a, b) => b[1].ty + b[1].ly - a[1].ty - a[1].ly) : [[c.branch, null]];
+    $('yoy-sub').textContent = (brs.length > 1 ? 'All branches: ' + brs.map(([b, v]) => b + ' ' + n0(v.ty) + ' this year / ' + n0(v.ly) + ' last year').join(', ') : brs[0][0]) + ' · ' + c.rep + (c.contact ? ' · ' + c.contact : '') + (c.phone ? ' ' + c.phone : '') + '. All products.';
     // chart
     const cw = 900, ch = 260, pad = { t: 22, b: 40, l: 8, r: 8 }, gw = (cw - pad.l - pad.r) / n, bw = Math.min(26, gw * 0.36);
     const mx = Math.max(1, ...tyA, ...lyA.map((v, i) => (have[i] ? v : 0)));
@@ -359,7 +361,7 @@
     const both = tyA.map((_, i) => i).filter((i) => have[i] && i !== partial);
     const sTy = both.reduce((s, i) => s + tyA[i], 0), sLy = both.reduce((s, i) => s + lyA[i], 0);
     $('yoy-take').innerHTML = both.length
-      ? '<b>' + labels[both[0]] + (both.length > 1 ? '–' + labels[both[both.length - 1]] : '') + ':</b> ' + fmtFull(sTy) + ' this year vs ' + fmtFull(sLy) + ' last year' + (sLy > 0 ? ', <b class="' + (sTy >= sLy ? 'up' : 'down') + '">' + (sTy >= sLy ? '+' : '') + Math.round((sTy / sLy - 1) * 100) + '%</b>' : sTy > 0 ? '. No quotes in those months last year.' : '') + '.'
+      ? '<b>' + labels[both[0]] + (both.length > 1 ? '–' + labels[both[both.length - 1]] : '') + ':</b> ' + fmtFull(sTy) + ' this year vs ' + fmtFull(sLy) + ' last year' + (sLy > 0 ? ', <b class="' + (sTy >= sLy ? 'up' : 'down') + '">' + (sTy >= sLy ? '+' : '') + Math.round((sTy / sLy - 1) * 100) + '%</b>.' : sTy > 0 ? '. No quotes in those months last year.' : '.')
       : 'No quotes from last year are loaded for these months yet, so only this year shows. Upload an Open Quotes export that starts 12 months earlier to fill in last year.';
     // table
     const t = $('yoy-table'); t.innerHTML = '';
@@ -367,7 +369,7 @@
     const thead = '<thead><tr><th class="txt">Month</th><th>Last year</th><th>This year</th><th>Change</th></tr></thead>';
     const body = rows.map((i) => { const d = have[i] ? tyA[i] - lyA[i] : null; return '<tr><td class="txt">' + labels[i] + (i === partial ? '* (to date)' : '') + '</td><td>' + (have[i] ? fmtFull(lyA[i]) : '<span class="m">not loaded</span>') + '</td><td>' + fmtFull(tyA[i]) + '</td><td class="' + (d == null || i === partial ? '' : d > 0 ? 'up' : d < 0 ? 'down' : '') + '">' + (d == null || i === partial ? '—' : (d > 0 ? '+' : '') + fmtFull(d)) + '</td></tr>'; }).join('');
     t.innerHTML = thead + '<tbody>' + body + '</tbody>';
-    $('yoy-note').textContent = 'Each month is compared with the same month a year earlier at ' + c.branch + '. "Not loaded" means the uploads do not reach back to that month yet. * Month to date.';
+    $('yoy-note').textContent = 'Each month is compared with the same month a year earlier, all branches combined. Branch counts at the top cover the last 13 months. "Not loaded" means the uploads do not reach back to that month yet. * Month to date.';
   }
 
   // ---------- call lists

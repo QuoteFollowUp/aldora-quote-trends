@@ -258,6 +258,21 @@
     }
     for (const c of custs) { c.amt = months.map(() => 0); c.quotes.forEach((x) => { c.amt[x.mi] += +x.total || 0; }); }
     W.lyHave = lyHave.map((n) => n >= 20);
+    // One customer across every branch, by name: this year and last year by month
+    const nameKey = (n) => String(n || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\b(inc|llc|co|corp|ltd|the)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    const byName = new Map();
+    const zero = () => months.map(() => 0);
+    for (const x of quotes) {
+      const mk = monthKey(x.date), ti = mIndex.get(mk), li = lyIdx.get(mk);
+      if (ti == null && li == null) continue;
+      const k = nameKey(x.site); let e = byName.get(k);
+      if (!e) { e = { n: zero(), amt: zero(), lyN: zero(), lyAmt: zero(), br: {} }; byName.set(k, e); }
+      const br = branchName(x.loc), t = +x.total || 0;
+      if (!e.br[br]) e.br[br] = { ty: 0, ly: 0 };
+      if (ti != null) { e.n[ti]++; e.amt[ti] += t; e.br[br].ty++; }
+      if (li != null) { e.lyN[li]++; e.lyAmt[li] += t; e.br[br].ly++; }
+    }
+    W.yoy = (name) => byName.get(nameKey(name)) || null;
     W.lyLabels = months.map((m) => monthLabel(m) + ' ' + addMonths(m, -12).slice(2, 4));
     W.tyLabels = months.map((m) => monthLabel(m) + ' ' + m.slice(2, 4));
     // Rep groups per branch: home branch, or 5%+ of the branch's quotes
