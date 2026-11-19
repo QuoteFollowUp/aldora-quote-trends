@@ -170,8 +170,10 @@
   }
 
   // ---- Everything the dashboard shows, computed once per load
+  const TREND_FROM = '2026-01-01';
   function build(ds) {
-    const quotes = ds.quotes.filter((x) => BRANCHES[x.loc]);
+    // Trends use 2026 quotes only for now. Older quotes stay saved but are not shown.
+    const quotes = ds.quotes.filter((x) => BRANCHES[x.loc] && x.date >= TREND_FROM);
     if (!quotes.length) return null;
     const asOf = quotes.reduce((m, x) => (x.date > m ? x.date : m), '');
     const asOfMonth = monthKey(asOf);
