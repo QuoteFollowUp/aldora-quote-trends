@@ -265,14 +265,25 @@
     for (const x of quotes) {
       const mk = monthKey(x.date), ti = mIndex.get(mk), li = lyIdx.get(mk);
       if (ti == null && li == null) continue;
-      const k = nameKey(x.site); let e = byName.get(k);
+      const k = nameKey(x.site) + '|' + branchName(x.loc); let e = byName.get(k);
       if (!e) { e = { n: zero(), amt: zero(), lyN: zero(), lyAmt: zero(), br: {} }; byName.set(k, e); }
       const br = branchName(x.loc), t = +x.total || 0;
       if (!e.br[br]) e.br[br] = { ty: 0, ly: 0 };
       if (ti != null) { e.n[ti]++; e.amt[ti] += t; e.br[br].ty++; }
       if (li != null) { e.lyN[li]++; e.lyAmt[li] += t; e.br[br].ly++; }
     }
-    W.yoy = (name) => byName.get(nameKey(name)) || null;
+    // Sum the given branches (all branches when none given)
+    W.yoy = (name, branches) => {
+      const nk = nameKey(name), out = { n: zero(), amt: zero(), lyN: zero(), lyAmt: zero(), br: {} }; let any = false;
+      for (const [k, e] of byName) {
+        const cut = k.lastIndexOf('|'), kn = k.slice(0, cut), kb = k.slice(cut + 1);
+        if (kn !== nk || (branches && !branches.includes(kb))) continue;
+        any = true; out.br[kb] = { ty: e.br[kb].ty, ly: e.br[kb].ly };
+        for (const f of ['n', 'amt', 'lyN', 'lyAmt']) e[f].forEach((v, i) => { out[f][i] += v; });
+      }
+      return any ? out : null;
+    };
+    W.nameKey = nameKey;
     W.lyLabels = months.map((m) => monthLabel(m) + ' ' + addMonths(m, -12).slice(2, 4));
     W.tyLabels = months.map((m) => monthLabel(m) + ' ' + m.slice(2, 4));
     // Rep groups per branch: home branch, or 5%+ of the branch's quotes
@@ -375,13 +386,37 @@
       r.any = total.some((n) => n > 0);
       return r;
     }
+    // Same customer, same rep at more than one facility: one combined row (all-branch views)
+    const merged = (() => {
+      const nk = W.nameKey, groups = new Map();
+      for (const c of custs) { const k = nk(c.customer) + '|' + c.rep; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+      const out = [];
+      for (const [k, g] of groups) {
+        if (g.length === 1) { out.push(g[0]); continue; }
+        g.sort((a, b) => b.quotes.length - a.quotes.length);
+        const p = g[0], quotes = g.flatMap((c) => c.quotes).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+        const m = { ...p, key: 'M|' + k, quotes, members: g, branches: [...new Set(g.map((c) => c.branch))], branchLabel: [...new Set(g.map((c) => c.branch))].join(' + '),
+          contact: p.contact || (g.find((c) => c.contact) || {}).contact || '', phone: p.phone || (g.find((c) => c.phone) || {}).phone || '' };
+        const pc = CATS.map((cat, i) => [cat, quotes.filter((x) => x.mask & (1 << i)).length]).filter((q) => q[1] > 0).sort((a, b) => b[1] - a[1]);
+        m.products = pc.map((q) => q[0] + ' (' + q[1] + ')').join(', ') || 'Other';
+        m.recentQuotes = quotes.slice(-3).reverse().map((x) => ({ date: toUS(x.date), quote: x.ord, total: x.total, products: CATS.filter((cat, i) => x.mask & (1 << i)).join(' + ') || 'Other' }));
+        m.amt = months.map(() => 0); quotes.forEach((x) => { m.amt[x.mi] += +x.total || 0; });
+        // Earliest branch start, so a long-running branch sets the baseline
+        m.branch = g.slice().sort((a, b) => (bStart[a.branch] || 0) - (bStart[b.branch] || 0))[0].branch;
+        m.stats = { All: stats(m, -1) }; CATS.forEach((cat, i) => { m.stats[cat] = stats(m, i); });
+        m.branch = p.branch;
+        out.push(m);
+      }
+      return out;
+    })();
     function customers({ branch, cat, rep, repKey, reps }) {
       const out = [];
-      for (const c of custs) {
+      const all = !branch || branch === 'All branches';
+      for (const c of all ? merged : custs) {
         if (branch && branch !== 'All branches' && c.branch !== branch) continue;
         if (rep && c.rep !== rep) continue;
         if (reps && !reps.has(c.rep)) continue;
-        if (repKey && c.repKey !== repKey) continue;
+        if (repKey && !(c.members ? c.members.some((x) => x.repKey === repKey) : c.repKey === repKey)) continue;
         const s = c.stats[cat || 'All']; if (!s) continue;
         out.push({ c, s });
       }

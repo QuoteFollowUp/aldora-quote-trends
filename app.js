@@ -268,7 +268,7 @@
     return list;
   }
   const SORTS = {
-    customer: (x) => x.c.customer, branch: (x) => x.c.branch, rep: (x) => x.c.rep, contact: (x) => x.c.contact, phone: (x) => x.c.phone, products: (x) => x.c.products,
+    customer: (x) => x.c.customer, branch: (x) => x.c.branchLabel || x.c.branch, rep: (x) => x.c.rep, contact: (x) => x.c.contact, phone: (x) => x.c.phone, products: (x) => x.c.products,
     prior: (x) => x.s.prior, recent: (x) => x.s.recent, change: (x) => x.s.change, last: (x) => x.s.lastISO, lastTotal: (x) => x.s.lastTotal, days: (x) => x.s.daysSince, status: (x) => x.s.status,
   };
   function drawCustomers() {
@@ -288,7 +288,7 @@
     table($('cust-table'), [
       { check: all, cell: (td, x, row) => { td.className = 'sel'; const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = picked.has(pkey(x.c)); cb.setAttribute('aria-label', 'Select ' + x.c.customer); cb.addEventListener('change', () => { cb.checked ? picked.add(pkey(x.c)) : picked.delete(pkey(x.c)); row.classList.toggle('picked', cb.checked); updateSel(); }); td.appendChild(cb); } },
       { h: 'Customer', key: 'customer', txt: true, cell: (td, x) => { td.className = 'txt'; const b = document.createElement('button'); b.type = 'button'; b.className = 'cust-link'; b.textContent = x.c.customer; b.title = 'Compare this year with last year'; b.addEventListener('click', () => openYoy(x.c)); td.appendChild(b); } },
-      ...(P.branch === 'All branches' ? [{ h: 'Branch', key: 'branch', txt: true, v: (x) => x.c.branch }] : []),
+      ...(P.branch === 'All branches' ? [{ h: 'Branch', key: 'branch', txt: true, v: (x) => x.c.branchLabel || x.c.branch }] : []),
       { h: 'Rep', key: 'rep', txt: true, v: (x) => x.c.rep },
       { h: 'Contact', key: 'contact', txt: true, v: (x) => x.c.contact },
       { h: 'Phone', key: 'phone', txt: true, v: (x) => x.c.phone },
@@ -334,14 +334,14 @@
   function drawYoy() {
     const W = B.W, c = yoyC; if (!c) return;
     const isAmt = yoyM === 'amt', fmt = isAmt ? (v) => (v >= 1000 ? '$' + d3.format(',.0f')(v / 1000) + 'K' : money(v)) : n0, fmtFull = isAmt ? money : n0;
-    const all = W.yoy && W.yoy(c.customer);
+    const all = W.yoy && W.yoy(c.customer, c.branches || [c.branch]);
     const ty = all ? (isAmt ? all.amt : all.n) : isAmt ? c.amt : c.stats.All.m, ly = all ? (isAmt ? all.lyAmt : all.lyN) : c.ly ? (isAmt ? c.ly.amt : c.ly.n) : W.months.map(() => 0);
     // Last 12 months only, so every bar pair is a month this year next to the same month last year
     const off = Math.max(0, W.months.length - 12), pick = (a) => a.slice(off);
     const tyA = pick(ty), lyA = pick(ly), have = pick(W.lyHave), labels = pick(W.tyLabels), lyLabels = pick(W.lyLabels), n = tyA.length, partial = W.partial ? n - 1 : -1;
     $('yoy-title').textContent = c.customer;
     const brs = all ? Object.entries(all.br).sort((a, b) => b[1].ty + b[1].ly - a[1].ty - a[1].ly) : [[c.branch, null]];
-    $('yoy-sub').textContent = (brs.length > 1 ? 'All branches: ' + brs.map(([b, v]) => b + ' ' + n0(v.ty) + ' this year / ' + n0(v.ly) + ' last year').join(', ') : brs[0][0]) + ' · ' + c.rep + (c.contact ? ' · ' + c.contact : '') + (c.phone ? ' ' + c.phone : '') + '. All products.';
+    $('yoy-sub').textContent = (brs.length > 1 ? 'Combined: ' + brs.map(([b, v]) => b + ' ' + n0(v.ty) + ' this year / ' + n0(v.ly) + ' last year').join(', ') : brs[0][0]) + ' · ' + c.rep + (c.contact ? ' · ' + c.contact : '') + (c.phone ? ' ' + c.phone : '') + '. All products.';
     // chart
     const cw = 900, ch = 260, pad = { t: 22, b: 40, l: 8, r: 8 }, gw = (cw - pad.l - pad.r) / n, bw = Math.min(26, gw * 0.36);
     const mx = Math.max(1, ...tyA, ...lyA.map((v, i) => (have[i] ? v : 0)));
@@ -369,7 +369,7 @@
     const thead = '<thead><tr><th class="txt">Month</th><th>Last year</th><th>This year</th><th>Change</th></tr></thead>';
     const body = rows.map((i) => { const d = have[i] ? tyA[i] - lyA[i] : null; return '<tr><td class="txt">' + labels[i] + (i === partial ? '* (to date)' : '') + '</td><td>' + (have[i] ? fmtFull(lyA[i]) : '<span class="m">not loaded</span>') + '</td><td>' + fmtFull(tyA[i]) + '</td><td class="' + (d == null || i === partial ? '' : d > 0 ? 'up' : d < 0 ? 'down' : '') + '">' + (d == null || i === partial ? '—' : (d > 0 ? '+' : '') + fmtFull(d)) + '</td></tr>'; }).join('');
     t.innerHTML = thead + '<tbody>' + body + '</tbody>';
-    $('yoy-note').textContent = 'Each month is compared with the same month a year earlier, all branches combined. Branch counts at the top cover the last 13 months. "Not loaded" means the uploads do not reach back to that month yet. * Month to date.';
+    $('yoy-note').textContent = 'Each month is compared with the same month a year earlier, with this customer\'s branches combined when the same rep has it at more than one facility. Branch counts at the top cover the last 13 months. "Not loaded" means the uploads do not reach back to that month yet. * Month to date.';
   }
 
   // ---------- call lists
@@ -426,13 +426,13 @@
     const rows = listRows(); if (!rows.length) return;
     const W = B.W;
     const head = ['Customer', 'Branch', 'Rep', 'Contact', 'Phone', 'Products quoted', ...W.labels, W.priorLabel, W.recentLabel, 'Status', 'Last quote', 'Days since', 'Quote 1 date', 'Quote 1 total', 'Quote 1 products', 'Quote 2 date', 'Quote 2 total', 'Quote 2 products', 'Quote 3 date', 'Quote 3 total', 'Quote 3 products', 'Call notes'];
-    const lines = [head].concat(rows.map((x) => { const q = x.c.recentQuotes, qc = []; for (let i = 0; i < 3; i++) qc.push(q[i] ? q[i].date : '', q[i] ? q[i].total : '', q[i] ? q[i].products : ''); return [x.c.customer, x.c.branch, x.c.rep, x.c.contact, x.c.phone, x.c.products, ...x.s.m, x.s.prior, x.s.recent, x.s.status, x.s.last, x.s.daysSince, ...qc, '']; }));
+    const lines = [head].concat(rows.map((x) => { const q = x.c.recentQuotes, qc = []; for (let i = 0; i < 3; i++) qc.push(q[i] ? q[i].date : '', q[i] ? q[i].total : '', q[i] ? q[i].products : ''); return [x.c.customer, (x.c.branchLabel || x.c.branch), x.c.rep, x.c.contact, x.c.phone, x.c.products, ...x.s.m, x.s.prior, x.s.recent, x.s.status, x.s.last, x.s.daysSince, ...qc, '']; }));
     download(fileBase(rows) + '.csv', '﻿' + lines.map((r) => r.map(csvCell).join(',')).join('\r\n'), 'text/csv');
   });
   $('copy-list').addEventListener('click', () => {
     const rows = listRows(); if (!rows.length) return;
     const W = B.W;
-    const text = [['Customer', 'Branch', 'Rep', 'Contact', 'Phone', 'Products quoted', W.priorLabel, W.recentLabel, 'Status', 'Last 3 quotes', 'Call notes'].join('\t')].concat(rows.map((x) => [x.c.customer, x.c.branch, x.c.rep, x.c.contact, x.c.phone, x.c.products, x.s.prior, x.s.recent, x.s.status, x.c.recentQuotes.map((q) => q.date + ' ' + money(q.total) + ' ' + q.products).join('; '), ''].join('\t'))).join('\n');
+    const text = [['Customer', 'Branch', 'Rep', 'Contact', 'Phone', 'Products quoted', W.priorLabel, W.recentLabel, 'Status', 'Last 3 quotes', 'Call notes'].join('\t')].concat(rows.map((x) => [x.c.customer, (x.c.branchLabel || x.c.branch), x.c.rep, x.c.contact, x.c.phone, x.c.products, x.s.prior, x.s.recent, x.s.status, x.c.recentQuotes.map((q) => q.date + ' ' + money(q.total) + ' ' + q.products).join('; '), ''].join('\t'))).join('\n');
     const btn = $('copy-list');
     navigator.clipboard.writeText(text).then(() => flash(btn, 'Copied ' + n0(rows.length) + ' rows'), () => flash(btn, 'Copy failed'));
   });
@@ -455,7 +455,7 @@
     const all = B.volume({ branch: scope, rep, cat: 'All' });
     const start = Math.min(...brs.map((b) => B.bStart[b] || 0));
     const prodsFor = (b) => E.CATS.map((c) => ({ c, v: B.volume({ branch: b, rep, cat: c }) })).filter((r) => d3.sum(r.v.total) > 0).sort((a, b2) => d3.sum(b2.v.total) - d3.sum(a.v.total));
-    const custs = B.customers({ branch: scope, rep, cat: 'All' }).filter((x) => brs.includes(x.c.branch));
+    const custs = B.customers({ branch: scope, rep, cat: 'All' }).filter((x) => (x.c.branches || [x.c.branch]).some((b) => brs.includes(b)));
     const sc = B.statusCounts(custs);
     const dropped = custs.filter((x) => x.s.status === 'Dropped off').sort((a, b) => b.c.quotes.length - a.c.quotes.length);
     const growing = custs.filter((x) => x.s.recent > 0 && x.s.change > 0).sort((a, b) => b.s.change - a.s.change || b.s.recent - a.s.recent).slice(0, 5);
