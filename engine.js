@@ -81,6 +81,8 @@
     if (m && MONTHS3[m[1].toLowerCase()]) return ymd(+m[3], MONTHS3[m[1].toLowerCase()], +m[2]);
     return cellDate(s);
   }
+  // "Freeman, Jordan" -> "Jordan Freeman"
+  const firstLast = (n) => { const m = String(n || '').match(/^\s*([^,]+),\s*([^,]+?)\s*$/); return m ? m[2] + ' ' + m[1] : String(n || '').trim(); };
   function parseLog(rows) {
     const out = [], skipped = { noDate: 0, verbal: 0, badNumber: 0 };
     for (const r of rows) {
@@ -103,7 +105,7 @@
       out.push({
         loc, ord, date, site, cid: '',
         contact: /^(none identified|company.*)$/i.test(contact) ? '' : contact,
-        phone: '', rep: clean(r.Rep) || 'Unassigned',
+        phone: '', rep: firstLast(clean(r.Rep)) || 'Unassigned',
         total: Math.round(num(r.Amount) * 100) / 100, mask,
       });
     }
@@ -202,6 +204,7 @@
     };
     const qs = [];
     for (const x of quotes) { const mi = mIndex.get(monthKey(x.date)); if (mi != null) qs.push({ ...x, mi, branch: branchName(x.loc), cust: x.site }); }
+    for (const x of qs) if (x.rep && x.rep.includes(',')) x.rep = firstLast(x.rep);
     const cutoff = dayNum(asOf) - 60;
 
     // Branch start month: first month with 20+ quotes
