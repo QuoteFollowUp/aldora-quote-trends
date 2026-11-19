@@ -234,6 +234,14 @@
       c.quotes.push(x);
     }
     const custs = [...custMap.values()];
+    const RO0 = root.QT_ROSTER, rosterKey = (n) => String(n || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\b(inc|llc|co|corp|ltd|the|company|incorporated)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    let RO = null;
+    if (RO0 && RO0.lists) {
+      RO = { reps: new Set(Object.keys(RO0.lists)), aliases: RO0.aliases || {}, byCust: new Map() };
+      for (const [rep, list] of Object.entries(RO0.lists)) for (const n of list) { const k = rosterKey(n); if (!RO.byCust.has(k)) RO.byCust.set(k, []); if (!RO.byCust.get(k).includes(rep)) RO.byCust.get(k).push(rep); }
+    }
+    // Quotes per rep per branch, to break ties when two reps list the same customer
+    const brCount = new Map(); for (const x of qs) { const r = (RO && RO.aliases[x.rep]) || x.rep, k = r + '|' + x.branch; brCount.set(k, (brCount.get(k) || 0) + 1); }
     for (const c of custs) {
       // A quote with no salesperson never outvotes a named rep
       const named = [...c.reps.entries()].filter((e) => e[0] !== 'Unassigned');
@@ -242,6 +250,15 @@
       c.cid = (c.quotes.slice().reverse().find((x) => x.cid) || {}).cid || '';
       const ov = assignMap.get(c.loc + '|' + c.cid) || assignMap.get(c.loc + '|N:' + c.customer.toUpperCase());
       if (ov) { c.erpRep = c.rep; c.rep = ov; }
+      // Current reps only (Quote Trends display). A customer quoted under a former rep, staff member or Unassigned goes to the rep whose list has it.
+      if (!ov && RO) {
+        const al = RO.aliases[c.rep]; if (al) c.rep = al;
+        if (!RO.reps.has(c.rep)) {
+          const cands = RO.byCust.get(rosterKey(c.customer));
+          if (cands && cands.length) { c.erpRep = c.rep; c.rep = cands.length === 1 ? cands[0] : cands.slice().sort((a, b) => (brCount.get(b + '|' + c.branch) || 0) - (brCount.get(a + '|' + c.branch) || 0))[0]; c.moved = true; }
+          else { c.erpRep = c.rep; c.rep = 'Unassigned'; }
+        }
+      }
       const pc = CATS.map((cat, i) => [cat, c.quotes.filter((x) => x.mask & (1 << i)).length]).filter((p) => p[1] > 0).sort((a, b) => b[1] - a[1]);
       c.products = pc.map((p) => p[0] + ' (' + p[1] + ')').join(', ') || 'Other';
       c.recentQuotes = c.quotes.slice(-3).reverse().map((x) => ({ date: toUS(x.date), quote: x.ord, total: x.total, products: CATS.filter((cat, i) => x.mask & (1 << i)).join(' + ') || 'Other' }));
